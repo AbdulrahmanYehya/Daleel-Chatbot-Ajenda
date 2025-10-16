@@ -1,0 +1,13 @@
+fastapi
+uvicorn
+requests
+python-dotenv
+pydantic
+reportlab
+python-docx
+pillow
+pytesseract
+python-bidi
+arabic-reshaper
+langdetect
+python-multipart
