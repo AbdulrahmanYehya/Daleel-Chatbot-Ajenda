@@ -15,6 +15,11 @@ class Database:
             self.data = {
                 'tasks': [],
                 'notes': [],
+                'analytics': {
+                    'total_tasks_created': 0,
+                    'total_notes_created': 0,
+                    'last_activity': datetime.now().isoformat()
+                },
                 'last_id': 0
             }
             self.save_data()
@@ -27,19 +32,25 @@ class Database:
         self.data['last_id'] += 1
         return self.data['last_id']
     
-    def create_task(self, title, description, due_date=None, due_time=None, priority="medium", language="en"):
+    def create_task(self, title, description, due_date=None, due_time=None, duration="1 hour", priority="medium", category="work", language="en"):
         task = {
             'id': self.get_next_id(),
             'title': title,
             'description': description,
-            'due_date': due_date,
+            'due_date': due_date or datetime.now().strftime('%Y-%m-%d'),
             'due_time': due_time,
+            'duration': duration,
             'priority': priority,
+            'category': category,
             'language': language,
             'created_at': datetime.now().isoformat(),
-            'completed': False
+            'updated_at': datetime.now().isoformat(),
+            'completed': False,
+            'completed_at': None
         }
         self.data['tasks'].append(task)
+        self.data['analytics']['total_tasks_created'] += 1
+        self.data['analytics']['last_activity'] = datetime.now().isoformat()
         self.save_data()
         return task
     
@@ -54,6 +65,8 @@ class Database:
             'updated_at': datetime.now().isoformat()
         }
         self.data['notes'].append(note)
+        self.data['analytics']['total_notes_created'] += 1
+        self.data['analytics']['last_activity'] = datetime.now().isoformat()
         self.save_data()
         return note
     
@@ -70,3 +83,17 @@ class Database:
     def delete_note(self, note_id):
         self.data['notes'] = [n for n in self.data['notes'] if n['id'] != note_id]
         self.save_data()
+    
+    def clear_all(self):
+        self.data['tasks'] = []
+        self.data['notes'] = []
+        self.save_data()
+    
+    def complete_task(self, task_id):
+        for task in self.data['tasks']:
+            if task['id'] == task_id:
+                task['completed'] = True
+                task['completed_at'] = datetime.now().isoformat()
+                self.save_data()
+                return True
+        return False

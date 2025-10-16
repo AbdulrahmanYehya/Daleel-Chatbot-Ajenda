@@ -1,249 +1,444 @@
 import requests
 import json
 import re
+import time
+import random
 from datetime import datetime, timedelta
-from config import Config
 
 class AIHandler:
     def __init__(self):
-        self.ollama_url = Config.OLLAMA_URL
-        self.model_name = Config.MODEL_NAME
+        self.ollama_url = "http://localhost:11434/api/generate"
+        self.model_name = "mistral:7b-instruct"  # Using Mistral 7B instead of Phi-3
+        self.conversation_context = []
+        self.thinking_patterns = self._load_thinking_patterns()
         
-        # Bilingual system prompt
-        self.system_prompt = """
-You are an advanced bilingual productivity assistant. You respond in the same language the user writes in (Arabic or English) and output structured JSON.
+        # Enhanced system prompt for Mistral
+        self.system_prompt = """You are an INTELLIGENT PRODUCTIVITY AI that excels at:
+1. Complex task planning and scheduling
+2. Detailed research and knowledge synthesis  
+3. Project breakdown and milestone creation
+4. Adaptive workflow optimization
+5. Intelligent clarification and follow-up
 
-CRITICAL RULES:
-1. Respond with ONLY valid JSON, no other text
-2. Use the exact JSON structure provided
-3. Handle multiple tasks/notes in one request
-4. Match the user's language (Arabic/English) in your output
-5. For research requests, create detailed, well-structured notes
-
-RESPONSE FORMAT (ALWAYS USE THIS EXACT STRUCTURE):
+RESPONSE FORMAT (STRICT JSON):
 {
-  "intent": "create_tasks | create_notes | create_research | plan_day | unknown",
-  "language": "ar | en",
+  "mode": "DIRECT_ACTION | CLARIFICATION_NEEDED | RESEARCH_PREVIEW | PROJECT_PLAN",
+  "language": "en | ar",
+  "message": "Intelligent response to user",
   "tasks": [
     {
-      "title": "Task title in user's language",
-      "description": "Task description in user's language",
+      "title": "Descriptive task title",
+      "description": "Detailed task description with context", 
       "due_date": "YYYY-MM-DD",
-      "due_time": "HH:MM",
-      "priority": "low | medium | high"
+      "due_time": "HH:MM (24h format)",
+      "duration": "X hours/minutes",
+      "priority": "high | medium | low",
+      "category": "work | study | personal | health | other"
     }
   ],
   "notes": [
     {
-      "title": "Note title in user's language",
-      "content": "Detailed content in user's language",
-      "category": "Research | Personal | Work | Ideas"
+      "title": "Note title",
+      "content": "Comprehensive, well-structured content",
+      "category": "Research | Reference | Ideas | Project | Personal"
     }
-  ]
+  ],
+  "research_preview": {
+    "title": "Research title", 
+    "content": "Detailed, structured research content",
+    "category": "Research"
+  },
+  "missing_info": ["specific_field1", "specific_field2"],
+  "suggestions": ["helpful_suggestion1", "helpful_suggestion2"]
 }
 
-LANGUAGE DETECTION:
-- If user writes in Arabic: set "language" to "ar" and use Arabic in titles/descriptions
-- If user writes in English: set "language" to "en" and use English in titles/descriptions
+INTELLIGENT BEHAVIORS:
+- Ask SPECIFIC clarifying questions when information is incomplete
+- Provide helpful suggestions and alternatives
+- Break down complex requests into actionable steps
+- Consider time management and productivity principles
+- Create comprehensive, useful research notes
 
-TASK CREATION:
-- Extract ALL tasks from the message
-- Infer dates/times from context
-- Set appropriate priorities
+EXAMPLES:
 
-NOTE CREATION:
-- For simple notes: capture the content
-- For research: create comprehensive, organized information
+User: "I'm overwhelmed with work"
+{
+  "mode": "CLARIFICATION_NEEDED",
+  "language": "en",
+  "message": "I understand feeling overwhelmed. Let me help you get organized. Could you tell me:\n1. What are your main work responsibilities?\n2. Do you have any urgent deadlines?\n3. How many hours do you typically work per day?",
+  "tasks": [],
+  "notes": [],
+  "missing_info": ["work_responsibilities", "deadlines", "work_hours"],
+  "suggestions": ["Consider time blocking", "Prioritize by urgency/importance", "Break large tasks into smaller steps"]
+}
 
-RESEARCH EXAMPLES:
-User: "ابحث لي عن الذكاء الاصطناعي"
-→ Create detailed Arabic note about AI
+User: "ابحث لي عن الذكاء الاصطناعي في التعليم"
+{
+  "mode": "RESEARCH_PREVIEW", 
+  "language": "ar",
+  "message": "لقد قمت بالبحث عن الذكاء الاصطناعي في التعليم. هل تريد حفظ هذا البحث كملاحظة؟",
+  "tasks": [],
+  "notes": [],
+  "research_preview": {
+    "title": "الذكاء الاصطناعي في التعليم",
+    "content": "مقدمة:\nالذكاء الاصطناعي يحدث ثورة في مجال التعليم من خلال...\n\nالتطبيقات الرئيسية:\n1. التخصيص والتكيف مع مستوى الطالب\n2. الأتمتة في التصحيح والتقييم\n3...",
+    "category": "Research"
+  },
+  "suggestions": ["فكر في تطبيقات عملية في مؤسستك", "تابع أحدث الأبحاث في هذا المجال"]
+}
 
-User: "Research machine learning applications"
-→ Create detailed English note about ML
+User: "Plan my product launch for next month"
+{
+  "mode": "PROJECT_PLAN",
+  "language": "en", 
+  "message": "I've created a comprehensive product launch plan with 8 key tasks spread over 4 weeks.",
+  "tasks": [
+    {
+      "title": "Finalize product messaging and positioning",
+      "description": "Define core value proposition and key messaging for launch materials",
+      "due_date": "2024-02-05",
+      "due_time": "14:00",
+      "duration": "3 hours",
+      "priority": "high",
+      "category": "work"
+    },
+    {
+      "title": "Create launch marketing assets",
+      "description": "Develop social media graphics, email templates, and press kit",
+      "due_date": "2024-02-12", 
+      "due_time": "10:00",
+      "duration": "6 hours",
+      "priority": "high",
+      "category": "work"
+    }
+  ],
+  "notes": [
+    {
+      "title": "Product Launch Strategy",
+      "content": "Launch Timeline:\nWeek 1: Final prep\nWeek 2: Asset creation\nWeek 3: Internal training\nWeek 4: Public launch",
+      "category": "Project"
+    }
+  ],
+  "suggestions": ["Consider a soft launch to test messaging", "Prepare FAQ for customer support"]
+}
 
-MULTIPLE ITEMS EXAMPLES:
-User: "اعمل مهمة للواجب الساعة 7 ومهمة للرياضيات غدا واكتب ملاحظة عن أفكار المشروع"
-→ Creates 2 tasks (homework at 7pm, math tomorrow) + 1 note (project ideas)
+User: "عندي ٣ امتحانات الشهر القادم"
+{
+  "mode": "CLARIFICATION_NEEDED",
+  "language": "ar",
+  "message": "حسناً، دعني أساعدك في التخطيط لاستعداد الامتحانات. أرجو إخباري:\n١. ما هي المواد الثلاث؟\n٢. متى مواعيد الامتحانات بالتحديد؟\n٣. كم ساعة يمكنك الدراسة يومياً؟",
+  "tasks": [],
+  "notes": [], 
+  "missing_info": ["المواد", "مواعيد_الامتحانات", "ساعات_الدراسة_اليومية"],
+  "suggestions": ["استخدم تقنية بومودورو", "راجع المواد الصعبة أولاً", "خذ فترات راحة منتظمة"]
+}
 
-User: "Create task for CS assignment at 7pm and also make a note about project ideas"
-→ Creates 1 task (CS assignment) + 1 note (project ideas)
+ALWAYS respond with valid, well-structured JSON that demonstrates intelligent understanding of productivity principles."""
 
-ALWAYS RESPOND WITH VALID JSON ONLY!
-"""
+    def _load_thinking_patterns(self):
+        return {
+            'research': {
+                'en': ["Researching the topic thoroughly...", "Gathering comprehensive information...", "Structuring knowledge systematically..."],
+                'ar': ["جاري البحث المتعمق في الموضوع...", "جاري جمع المعلومات الشاملة...", "جاري تنظيم المعرفة بشكل منهجي..."]
+            },
+            'planning': {
+                'en': ["Creating an optimized schedule...", "Breaking down complex requirements...", "Applying productivity frameworks..."],
+                'ar': ["جاري إنشاء جدول مُحسّن...", "جاري تحليل المتطلبات المعقدة...", "جاري تطبيق أطر الإنتاجية..."]
+            },
+            'tasks': {
+                'en': ["Designing actionable tasks...", "Prioritizing by importance and urgency...", "Setting realistic timeframes..."],
+                'ar': ["جاري تصميم مهام قابلة للتنفيذ...", "جاري ترتيب الأولويات حسب الأهمية والعجلة...", "جاري تحديد إطارات زمنية واقعية..."]
+            },
+            'general': {
+                'en': ["Analyzing your request intelligently...", "Processing complex requirements...", "Generating optimal solutions..."],
+                'ar': ["جاري تحليل طلبك بذكاء...", "جاري معالجة المتطلبات المعقدة...", "جاري إنشاء الحلول المثلى..."]
+            }
+        }
 
     def detect_language(self, text):
-        """Detect if text is Arabic or English"""
         arabic_chars = len(re.findall(r'[\u0600-\u06FF]', text))
-        english_chars = len(re.findall(r'[a-zA-Z]', text))
+        return "ar" if arabic_chars > len(text) * 0.3 else "en"
+
+    def get_thinking_message(self, user_message, language):
+        """Get appropriate thinking message based on content"""
+        text_lower = user_message.lower()
         
-        if arabic_chars > english_chars:
-            return "ar"
+        if any(word in text_lower for word in ['research', 'ابحث', 'بحث', 'معلومات']):
+            category = 'research'
+        elif any(word in text_lower for word in ['plan', 'schedule', 'خطط', 'جدول']):
+            category = 'planning'
+        elif any(word in text_lower for word in ['task', 'مهمة', 'مهام', 'عمل']):
+            category = 'tasks'
         else:
-            return "en"
-
-    def parse_date_references(self, text, language):
-        """Convert natural language dates to actual dates"""
-        today = datetime.now()
-        text_lower = text.lower()
+            category = 'general'
         
-        if language == "en":
-            if 'tomorrow' in text_lower:
-                return (today + timedelta(days=1)).strftime('%Y-%m-%d')
-            elif 'today' in text_lower:
-                return today.strftime('%Y-%m-%d')
-            elif 'next week' in text_lower:
-                return (today + timedelta(days=7)).strftime('%Y-%m-%d')
-        elif language == "ar":
-            if 'غدا' in text or 'غداً' in text:
-                return (today + timedelta(days=1)).strftime('%Y-%m-%d')
-            elif 'اليوم' in text:
-                return today.strftime('%Y-%m-%d')
-            elif 'الأسبوع القادم' in text:
-                return (today + timedelta(days=7)).strftime('%Y-%m-%d')
-        
-        return today.strftime('%Y-%m-%d')
+        messages = self.thinking_patterns[category][language]
+        return random.choice(messages)
 
-    def parse_time(self, text, language):
-        """Extract time from text"""
-        if language == "en":
-            time_pattern = r'(\d{1,2})(?::(\d{2}))?\s*(am|pm)?'
-            matches = re.findall(time_pattern, text.lower())
+    def test_model(self):
+        """Test if model is responsive"""
+        start_time = time.time()
+        try:
+            response = requests.post(self.ollama_url, json={
+                "model": self.model_name,
+                "prompt": "Respond with only: OK",
+                "stream": False
+            }, timeout=10)
             
-            if matches:
-                hour, minute, period = matches[0]
-                hour = int(hour)
-                minute = int(minute) if minute else 0
-                
-                if period == 'pm' and hour < 12:
-                    hour += 12
-                elif period == 'am' and hour == 12:
-                    hour = 0
-                    
-                return f"{hour:02d}:{minute:02d}"
-        
-        elif language == "ar":
-            # Arabic time patterns like "الساعة 7" or "7 مساء"
-            time_pattern = r'(\d{1,2})'
-            matches = re.findall(time_pattern, text)
-            
-            if matches:
-                hour = int(matches[0])
-                # Simple conversion - you can enhance this
-                if 'مساء' in text or 'ليل' in text and hour < 12:
-                    hour += 12
-                return f"{hour:02d}:00"
-        
-        return None
+            return {
+                "status": "online",
+                "response_time": round(time.time() - start_time, 2)
+            }
+        except:
+            return {"status": "offline"}
 
-    def send_to_ai(self, user_message, detected_language):
-        """Send message to Phi-3 model and get structured response"""
+    def send_to_ai(self, user_message):
+        """Send message to AI with enhanced error handling"""
+        # Maintain conversation context (last 4 exchanges)
+        self.conversation_context.append(f"User: {user_message}")
+        if len(self.conversation_context) > 8:
+            self.conversation_context = self.conversation_context[-8:]
         
-        # Add language context to prompt
-        language_context = f"User is writing in {detected_language.upper()}. Respond in the same language."
-        full_prompt = f"System: {self.system_prompt}\n\nAdditional: {language_context}\n\nUser: {user_message}\n\nAssistant:"
+        context_str = "\n".join(self.conversation_context[-4:])  # Last 2 exchanges
+        full_prompt = f"SYSTEM: {self.system_prompt}\n\nCONVERSATION CONTEXT:\n{context_str}\n\nASSISTANT (JSON ONLY):"
         
         payload = {
             "model": self.model_name,
             "prompt": full_prompt,
             "stream": False,
             "options": {
-                "temperature": 0.1,
-                "top_p": 0.9
+                "temperature": 0.3,  # Slightly higher for creativity
+                "num_predict": 800,  # Longer responses for complex tasks
+                "top_k": 50,
+                "top_p": 0.9,
+                "repeat_penalty": 1.1
             }
         }
         
         try:
-            print(f"Sending to AI: {user_message[:100]}...")
-            response = requests.post(self.ollama_url, json=payload, timeout=60)
+            print(f"🧠 Processing: {user_message[:100]}...")
+            start_time = time.time()
+            
+            response = requests.post(self.ollama_url, json=payload, timeout=45)
+            processing_time = time.time() - start_time
             
             if response.status_code == 200:
                 result = response.json()
                 ai_response = result['response'].strip()
-                print(f"Raw AI response: {ai_response}")
+                print(f"✅ Response received in {processing_time:.2f}s")
                 
-                # Clean the response
-                ai_response = self.clean_json_response(ai_response)
+                # Add to conversation context
+                self.conversation_context.append(f"Assistant: {ai_response}")
                 
-                try:
-                    parsed_response = json.loads(ai_response)
-                    # Ensure language is set correctly
-                    if 'language' not in parsed_response:
-                        parsed_response['language'] = detected_language
-                    return parsed_response
-                except json.JSONDecodeError as e:
-                    print(f"JSON parse error: {e}")
-                    print(f"Raw AI response: {ai_response}")
-                    return {
-                        "intent": "unknown", 
-                        "language": detected_language, 
-                        "tasks": [], 
-                        "notes": []
-                    }
+                parsed_response = self.clean_json_response(ai_response)
+                parsed_response['processing_time'] = processing_time
+                return parsed_response
             else:
-                print(f"Ollama API error: {response.status_code}")
-                return {
-                    "intent": "error", 
-                    "language": detected_language, 
-                    "tasks": [], 
-                    "notes": []
-                }
+                print(f"❌ API error {response.status_code}")
+                return self.create_intelligent_fallback(user_message)
                 
+        except requests.exceptions.Timeout:
+            print("⏰ Request timeout")
+            return self.create_timeout_response(user_message)
         except Exception as e:
-            print(f"Error communicating with Ollama: {e}")
-            return {
-                "intent": "error", 
-                "language": detected_language, 
-                "tasks": [], 
-                "notes": []
-            }
+            print(f"💥 Error: {e}")
+            return self.create_intelligent_fallback(user_message)
     
     def clean_json_response(self, text):
-        """Extract JSON from AI response"""
-        # Remove any text before and after JSON
-        json_match = re.search(r'\{.*\}', text, re.DOTALL)
-        if json_match:
-            return json_match.group()
+        """Enhanced JSON cleaning with multiple fallback strategies"""
+        # Strategy 1: Direct JSON parse
+        try:
+            return json.loads(text)
+        except:
+            pass
         
-        # If no JSON found, return empty structure
-        return '{"intent": "unknown", "tasks": [], "notes": []}'
+        # Strategy 2: Remove markdown and try again
+        try:
+            clean_text = re.sub(r'```json\s*|```\s*', '', text)
+            clean_text = clean_text.strip()
+            return json.loads(clean_text)
+        except:
+            pass
+        
+        # Strategy 3: Extract JSON with regex
+        try:
+            json_match = re.search(r'\{.*\}', text, re.DOTALL)
+            if json_match:
+                return json.loads(json_match.group())
+        except:
+            pass
+        
+        # Strategy 4: Manual JSON construction from text
+        return self.create_intelligent_fallback(text)
+    
+    def create_intelligent_fallback(self, user_message):
+        """Create intelligent fallback based on message content"""
+        language = self.detect_language(user_message)
+        text_lower = user_message.lower()
+        
+        # Analyze message intent
+        if any(word in text_lower for word in ['research', 'ابحث', 'بحث']):
+            return self.create_research_fallback(user_message, language)
+        elif any(word in text_lower for word in ['task', 'مهمة', 'عمل']):
+            return self.create_task_fallback(user_message, language)
+        elif any(word in text_lower for word in ['plan', 'schedule', 'خطط', 'جدول']):
+            return self.create_planning_fallback(user_message, language)
+        else:
+            return self.create_general_fallback(user_message, language)
+    
+    def create_research_fallback(self, user_message, language):
+        """Create research-focused fallback"""
+        topic = self.extract_topic(user_message)
+        if language == 'ar':
+            return {
+                "mode": "RESEARCH_PREVIEW",
+                "language": "ar",
+                "message": "لقد واجهت بعض الصعوبة في معالجة طلبك. هل تريد أن أحاول البحث عن هذا الموضوع بطريقة مختلفة؟",
+                "research_preview": {
+                    "title": f"بحث عن {topic}",
+                    "content": "يبدو أن هناك حاجة لمزيد من التفاصيل حول هذا الموضوع. يمكنني مساعدتك في البحث إذا وضحت:\n• الجوانب المحددة التي تهمك\n• مستوى العمق المطلوب\n• الاستخدام المقصود للمعلومات",
+                    "category": "Research"
+                },
+                "suggestions": ["حدد جوانب محددة للبحث", "اختر مستوى التفصيل المناسب"]
+            }
+        else:
+            return {
+                "mode": "RESEARCH_PREVIEW",
+                "language": "en", 
+                "message": "I encountered some difficulty processing your request. Would you like me to try researching this topic differently?",
+                "research_preview": {
+                    "title": f"Research on {topic}",
+                    "content": "It seems more details are needed about this topic. I can help research if you clarify:\n• Specific aspects you're interested in\n• The depth level required\n• Intended use of the information",
+                    "category": "Research"
+                },
+                "suggestions": ["Specify particular aspects to research", "Choose appropriate detail level"]
+            }
+    
+    def create_task_fallback(self, user_message, language):
+        """Create task-focused fallback"""
+        if language == 'ar':
+            return {
+                "mode": "CLARIFICATION_NEEDED",
+                "language": "ar",
+                "message": "أريد مساعدتك في إنشاء المهام بشكل أفضل. هل يمكنك تقديم:\n• وصف واضح للمهمة\n• الموعد النهائي إن وجد\n• الأولوية والمدة المتوقعة",
+                "missing_info": ["وصف_المهمة", "الموعد_النهائي", "الأولوية"],
+                "suggestions": ["استخدم أوقات محددة", "حدد الأولويات بوضوح"]
+            }
+        else:
+            return {
+                "mode": "CLARIFICATION_NEEDED",
+                "language": "en",
+                "message": "I want to help you create tasks better. Could you provide:\n• Clear task description\n• Deadline if any\n• Priority and expected duration", 
+                "missing_info": ["task_description", "deadline", "priority"],
+                "suggestions": ["Use specific times", "Define priorities clearly"]
+            }
+    
+    def create_planning_fallback(self, user_message, language):
+        """Create planning-focused fallback"""
+        if language == 'ar':
+            return {
+                "mode": "CLARIFICATION_NEEDED", 
+                "language": "ar",
+                "message": "للمساعدة في التخطيط الفعال، أرجو توضيح:\n• الفترة الزمنية (يوم، أسبوع، شهر)\n• الأنشطة أو الأهداف الرئيسية\n• القيود أو الأولويات",
+                "missing_info": ["الفترة_الزمنية", "الأهداف", "القيود"],
+                "suggestions": ["ابدء بالأهداف الكبيرة ثم التفاصيل", "ضع في الاعتبار فترات الراحة"]
+            }
+        else:
+            return {
+                "mode": "CLARIFICATION_NEEDED",
+                "language": "en", 
+                "message": "To help with effective planning, please clarify:\n• Time period (day, week, month)\n• Main activities or goals\n• Constraints or priorities",
+                "missing_info": ["time_period", "goals", "constraints"],
+                "suggestions": ["Start with big goals then details", "Consider break times"]
+            }
+    
+    def create_general_fallback(self, user_message, language):
+        """Create general intelligent fallback"""
+        if language == 'ar':
+            return {
+                "mode": "CLARIFICATION_NEEDED",
+                "language": "ar", 
+                "message": "لم أفهم طلبك بالكامل. هل يمكنك إعادة صياغته أو تقديم مزيد من التفاصيل؟",
+                "missing_info": ["الهدف_الرئيسي", "التفاصيل_المطلوبة", "السياق"],
+                "suggestions": ["كن محدداً في طلبك", "اذكر السياق والأهداف"]
+            }
+        else:
+            return {
+                "mode": "CLARIFICATION_NEEDED",
+                "language": "en",
+                "message": "I didn't fully understand your request. Could you rephrase or provide more details?",
+                "missing_info": ["main_goal", "required_details", "context"],
+                "suggestions": ["Be specific in your request", "Mention context and goals"]
+            }
+    
+    def create_timeout_response(self, user_message):
+        """Create response for timeout situations"""
+        language = self.detect_language(user_message)
+        
+        if language == 'ar':
+            return {
+                "mode": "CLARIFICATION_NEEDED",
+                "language": "ar",
+                "message": "استغرقت المعالجة وقتاً طويلاً. دعنا نحاول بطريقة أبسط. ما هو الشيء الأكثر أهمية الذي تريد تحقيقه؟",
+                "missing_info": ["الهدف_الأساسي"],
+                "suggestions": ["حاول تقسيم الطلب إلى أجزاء أصغر", "ركز على العناصر الأكثر أهمية أولاً"]
+            }
+        else:
+            return {
+                "mode": "CLARIFICATION_NEEDED", 
+                "language": "en",
+                "message": "Processing took too long. Let's try a simpler approach. What's the most important thing you want to achieve?",
+                "missing_info": ["primary_goal"],
+                "suggestions": ["Try breaking the request into smaller parts", "Focus on most important elements first"]
+            }
+    
+    def extract_topic(self, text):
+        """Extract main topic from text for fallback responses"""
+        # Simple topic extraction - can be enhanced
+        words = text.split()
+        if len(words) > 2:
+            return ' '.join(words[:3]) + '...'
+        return text[:20] + '...' if len(text) > 20 else text
     
     def process_message(self, user_message, db):
-        """Main method to process user message"""
-        # Detect language
-        detected_language = self.detect_language(user_message)
-        print(f"Detected language: {detected_language}")
-        
-        # Get structured response from AI
-        ai_response = self.send_to_ai(user_message, detected_language)
+        """Main processing function with enhanced capabilities"""
+        ai_response = self.send_to_ai(user_message)
         
         results = {
+            'mode': ai_response.get('mode', 'DIRECT_ACTION'),
+            'message': ai_response.get('message', ''),
+            'language': ai_response.get('language', 'en'),
             'created_tasks': [],
             'created_notes': [],
-            'intent': ai_response.get('intent', 'unknown'),
-            'language': ai_response.get('language', detected_language)
+            'research_preview': ai_response.get('research_preview'),
+            'missing_info': ai_response.get('missing_info', []),
+            'suggestions': ai_response.get('suggestions', []),
+            'processing_time': ai_response.get('processing_time', 0)
         }
         
-        # Create tasks from AI response
-        for task_data in ai_response.get('tasks', []):
-            task = db.create_task(
-                title=task_data['title'],
-                description=task_data.get('description', ''),
-                due_date=task_data.get('due_date'),
-                due_time=task_data.get('due_time'),
-                priority=task_data.get('priority', 'medium'),
-                language=results['language']
-            )
-            results['created_tasks'].append(task)
+        # Create tasks and notes if in direct action mode
+        if results['mode'] == 'DIRECT_ACTION':
+            for task_data in ai_response.get('tasks', []):
+                task = db.create_task(
+                    title=task_data.get('title', 'Task' if results['language'] == 'en' else 'مهمة'),
+                    description=task_data.get('description', ''),
+                    due_date=task_data.get('due_date'),
+                    due_time=task_data.get('due_time'),
+                    duration=task_data.get('duration', '1 hour' if results['language'] == 'en' else '1 ساعة'),
+                    priority=task_data.get('priority', 'medium'),
+                    category=task_data.get('category', 'work' if results['language'] == 'en' else 'عمل'),
+                    language=results['language']
+                )
+                results['created_tasks'].append(task)
+            
+            for note_data in ai_response.get('notes', []):
+                note = db.create_note(
+                    title=note_data.get('title', 'Note' if results['language'] == 'en' else 'ملاحظة'),
+                    content=note_data.get('content', ''),
+                    category=note_data.get('category', 'General'),
+                    language=results['language']
+                )
+                results['created_notes'].append(note)
         
-        # Create notes from AI response
-        for note_data in ai_response.get('notes', []):
-            note = db.create_note(
-                title=note_data['title'],
-                content=note_data['content'],
-                category=note_data.get('category', 'General'),
-                language=results['language']
-            )
-            results['created_notes'].append(note)
-        
+        print(f"🎯 Processing complete: {results['mode']}, Tasks: {len(results['created_tasks'])}, Notes: {len(results['created_notes'])}")
         return results
