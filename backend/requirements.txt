@@ -11,3 +11,5 @@ python-bidi
 arabic-reshaper
 langdetect
 python-multipart
+flask==2.3.3
+requests==2.31.0

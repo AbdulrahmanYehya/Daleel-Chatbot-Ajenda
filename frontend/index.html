@@ -1,25 +1,179 @@
-<!doctype html>
-<html lang="en">
+<!DOCTYPE html>
+<html lang="ar" dir="auto">
 <head>
-  <meta charset="utf-8" />
-  <meta name="viewport" content="width=device-width, initial-scale=1" />
-  <title>Ajenda Assistant - Daleel</title>
-  <link rel="stylesheet" href="style.css">
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>مساعد الإنتاجية | Productivity Assistant</title>
+    <link rel="stylesheet" href="{{ url_for('static', filename='style.css') }}">
 </head>
 <body>
-  <div id="chat">
-    <h2>Ajenda Assistant - Daleel</h2>
-    <div id="messages" dir="auto"></div>
-    <div id="inputRow">
-      <input id="msg" placeholder="Type a message or command..." />
-      <button id="send">Send</button>
+    <div class="container">
+        <h1>🤖 مساعد الإنتاجية | Productivity Assistant</h1>
+        
+        <div class="language-toggle">
+            <button onclick="setLanguage('ar')">العربية</button>
+            <button onclick="setLanguage('en')">English</button>
+        </div>
+        
+        <div class="chat-container" id="chatContainer">
+            <div class="message bot-message">
+                <div lang="ar">مرحباً! أستطيع مساعدتك في إنشاء المهام، الملاحظات، والمواضيع البحثية باللغة العربية أو الإنجليزية.</div>
+                <div lang="en" style="display: none;">Hello! I can help you create tasks, notes, and research topics in English or Arabic.</div>
+                <br>
+                <div lang="ar"><strong>جرب:</strong>
+                    <ul>
+                        <li>"اعمل مهمة للواجب الساعة 7 مساء"</li>
+                        <li>"ابحث لي عن الذكاء الاصطناعي"</li>
+                        <li>"أنشئ ملاحظة لأفكار المشروع ومهمة للمراجعة غدا"</li>
+                    </ul>
+                </div>
+                <div lang="en" style="display: none;"><strong>Try:</strong>
+                    <ul>
+                        <li>"Create a task for homework at 7 PM"</li>
+                        <li>"Research artificial intelligence"</li>
+                        <li>"Make a note for project ideas and create a task to review them tomorrow"</li>
+                    </ul>
+                </div>
+            </div>
+        </div>
+        
+        <div class="input-area">
+            <input type="text" id="messageInput" placeholder="Type your message in Arabic or English..." onkeypress="handleKeyPress(event)">
+            <button onclick="sendMessage()">إرسال | Send</button>
+        </div>
+        
+        <div class="items-grid">
+            <div>
+                <h3 lang="ar">المهام | Tasks</h3>
+                <div class="item-list" id="tasksList"></div>
+            </div>
+            <div>
+                <h3 lang="ar">الملاحظات | Notes</h3>
+                <div class="item-list" id="notesList"></div>
+            </div>
+        </div>
+        
+        <button onclick="clearAll()" class="clear-btn" lang="ar">مسح الكل | Clear All</button>
     </div>
-    <div style="margin-top:12px;">
-      <button id="record">Record Voice</button>
-      <input type="file" id="imgfile" accept="image/*" />
-      <button id="sendImg">Send Image</button>
-    </div>
-  </div>
-  <script src="script.js"></script>
+
+    <script>
+        let currentLanguage = 'ar';
+        
+        function setLanguage(lang) {
+            currentLanguage = lang;
+            // Show/hide elements based on language
+            document.querySelectorAll('[lang]').forEach(el => {
+                el.style.display = el.lang === lang ? 'block' : 'none';
+            });
+            // Update input placeholder
+            document.getElementById('messageInput').placeholder = 
+                lang === 'ar' ? 'اكتب رسالتك بالعربية أو الإنجليزية...' : 'Type your message in Arabic or English...';
+        }
+        
+        function addMessage(text, isUser = false, language = 'en') {
+            const container = document.getElementById('chatContainer');
+            const messageDiv = document.createElement('div');
+            messageDiv.className = `message ${isUser ? 'user-message' : 'bot-message'}`;
+            messageDiv.dir = language === 'ar' ? 'rtl' : 'ltr';
+            messageDiv.lang = language;
+            messageDiv.textContent = text;
+            container.appendChild(messageDiv);
+            container.scrollTop = container.scrollHeight;
+        }
+
+        async function sendMessage() {
+            const input = document.getElementById('messageInput');
+            const message = input.value.trim();
+            
+            if (!message) return;
+            
+            addMessage(message, true, currentLanguage);
+            input.value = '';
+            
+            try {
+                const response = await fetch('/api/chat', {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({ message: message })
+                });
+                
+                const data = await response.json();
+                
+                if (data.error) {
+                    addMessage(`Error: ${data.error}`, false, 'en');
+                } else {
+                    addMessage(data.response, false, data.language);
+                    updateItems();
+                }
+            } catch (error) {
+                addMessage('Error communicating with server', false, 'en');
+            }
+        }
+
+        function handleKeyPress(event) {
+            if (event.key === 'Enter') {
+                sendMessage();
+            }
+        }
+
+        async function updateItems() {
+            try {
+                const [tasksRes, notesRes] = await Promise.all([
+                    fetch('/api/tasks'),
+                    fetch('/api/notes')
+                ]);
+                
+                const tasks = await tasksRes.json();
+                const notes = await notesRes.json();
+                
+                // Update tasks list
+                const tasksList = document.getElementById('tasksList');
+                tasksList.innerHTML = tasks.map(task => `
+                    <div class="item" dir="${task.language === 'ar' ? 'rtl' : 'ltr'}">
+                        <strong>${task.title}</strong>
+                        <span class="delete-btn" onclick="deleteTask(${task.id})">×</span>
+                        <br>${task.description}
+                        ${task.due_time ? `<br>⏰ ${task.due_date} ${task.language === 'ar' ? 'الساعة' : 'at'} ${task.due_time}` : ''}
+                        ${task.priority ? `<br>${task.language === 'ar' ? 'الأولوية:' : 'Priority:'} ${task.priority}` : ''}
+                    </div>
+                `).join('');
+                
+                // Update notes list
+                const notesList = document.getElementById('notesList');
+                notesList.innerHTML = notes.map(note => `
+                    <div class="item" dir="${note.language === 'ar' ? 'rtl' : 'ltr'}">
+                        <strong>${note.title}</strong>
+                        <span class="delete-btn" onclick="deleteNote(${note.id})">×</span>
+                        <div class="note-content">${note.content}</div>
+                        ${note.category ? `<small>${note.category}</small>` : ''}
+                    </div>
+                `).join('');
+                
+            } catch (error) {
+                console.error('Error updating items:', error);
+            }
+        }
+
+        async function deleteTask(taskId) {
+            await fetch(`/api/tasks/${taskId}`, { method: 'DELETE' });
+            updateItems();
+        }
+
+        async function deleteNote(noteId) {
+            await fetch(`/api/notes/${noteId}`, { method: 'DELETE' });
+            updateItems();
+        }
+
+        async function clearAll() {
+            if (confirm(currentLanguage === 'ar' ? 'هل تريد مسح كل المهام والملاحظات؟' : 'Clear all tasks and notes?')) {
+                await fetch('/api/clear', { method: 'POST' });
+                updateItems();
+            }
+        }
+
+        // Initialize
+        setLanguage('ar');
+        updateItems();
+    </script>
 </body>
 </html>
