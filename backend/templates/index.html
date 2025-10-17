@@ -77,10 +77,26 @@
                         <input type="text" id="messageInput" 
                                placeholder="Describe what you want to accomplish..." 
                                onkeypress="handleKeyPress(event)">
+                        <div class="voice-controls">
+                            <button id="voiceButton" class="btn-voice" onclick="toggleVoiceRecognition()">
+                                <span id="voiceIcon">🎤</span>
+                            </button>
+                            <button id="speakButton" class="btn-speak" onclick="speakLastMessage()" style="display: none;">
+                                <span>🔊</span>
+                            </button>
+                        </div>
                         <button onclick="sendMessage()" id="sendButton" class="btn-send">
                             <span id="sendText">Send to AI</span>
                             <div class="send-loader" id="sendLoader" style="display: none;"></div>
                         </button>
+                    </div>
+                    <div class="voice-status" id="voiceStatus" style="display: none;">
+                        <div class="voice-indicator">
+                            <div class="voice-dot"></div>
+                            <div class="voice-dot"></div>
+                            <div class="voice-dot"></div>
+                        </div>
+                        <span id="voiceStatusText">Listening...</span>
                     </div>
                 </div>
             </div>

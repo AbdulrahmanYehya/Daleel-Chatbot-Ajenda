@@ -1,32 +1,53 @@
-from flask import Flask, render_template, request, jsonify, session
+from flask import Flask, render_template, request, jsonify, session, copy_current_request_context
 from database import Database
-from ai_handler import AIHandler
+from ai_handler import EnhancedAIHandler
 import json
 import time
 import threading
+import copy
+import requests
+import os
 from datetime import timedelta
+import logging
+from logging.handlers import RotatingFileHandler
+
+# Setup logging
+def setup_logging():
+    logging.basicConfig(
+        level=logging.INFO,
+        format='%(asctime)s %(levelname)s %(name)s %(message)s',
+        handlers=[
+            RotatingFileHandler('ai_chatbot.log', maxBytes=1000000, backupCount=5),
+            logging.StreamHandler()
+        ]
+    )
+
+setup_logging()
 
 app = Flask(__name__)
-app.secret_key = 'productivity_secret_2024'
+app.secret_key = os.environ.get('SECRET_KEY', 'ai_chatbot_secure_key_2024')
 app.config['PERMANENT_SESSION_LIFETIME'] = timedelta(days=1)
 
 db = Database()
-ai_handler = AIHandler()
+ai_handler = EnhancedAIHandler()
 
-# Enhanced responses with Mistral 7B
+# Enhanced responses with context awareness
 RESPONSES = {
     'en': {
-        'welcome': "🚀 **Intelligent Productivity AI**\n\nI'm your AI assistant that can:\n• Create and schedule tasks\n• Plan your entire day\n• Research topics and create notes\n• Break down complex projects\n• Adapt to your workflow\n\nI'll ask clarifying questions to give you the best results!",
+        'welcome': "🚀 **Intelligent Productivity AI**\n\nI'm your AI assistant that can:\n• Create and schedule tasks\n• Plan your entire day\n• Research topics and create notes\n• Break down complex projects\n• Understand images and documents\n• Process voice commands\n• Adapt to your workflow\n\nI'll ask clarifying questions to give you the best results!",
         'examples': [
-            "Plan my entire workday: deep work 9-11am, meetings 2-3pm, email catchup 4pm",
-            "Research quantum computing and create a detailed study note",
-            "I have a big project due Friday - break it down into daily tasks",
-            "Create a morning routine: exercise 7am, meditation 7:30, planning 8am",
-            "Make a note for my business plan with market analysis and financial projections",
-            "Schedule my exam preparation: 2 weeks, 3 subjects, 2 hours daily",
-            "Create tasks for home renovation: planning, purchasing, execution phases"
+            "Create task for homework at 8pm with high priority",
+            "Plan my study session for 2 hours tomorrow",
+            "I need to exercise and cook dinner tonight",
+            "Research artificial intelligence basics",
+            "Make a note for my project ideas",
+            "Schedule meetings for tomorrow: 10am team meeting, 2pm client call",
+            "Create morning routine: exercise 7am, meditation 7:30, work 8am",
+            "Plan my week from Monday to Friday with work tasks",
+            "Create a complex project plan with multiple phases",
+            "Research climate change effects with 500 words summary"
         ],
-        'thinking': ["Analyzing your request...", "Planning your schedule...", "Researching the topic...", "Creating your tasks...", "Optimizing your workflow..."],
+        'thinking': ["Analyzing your request...", "Planning your schedule...", "Creating your tasks...", "Optimizing your workflow..."],
         'tasks_title': "🎯 Your Tasks",
         'notes_title': "📚 Knowledge Base", 
         'input_placeholder': "What would you like me to help you accomplish?",
@@ -35,17 +56,20 @@ RESPONSES = {
         'model_status': "AI Model: Ready"
     },
     'ar': {
-        'welcome': "🚀 **مساعد الإنتاجية الذكي**\n\nأنا مساعدك الذكي الذي يستطيع:\n• إنشاء وجدولة المهام\n• تخطيط يومك بالكامل\n• البحث في المواضيع وإنشاء الملاحظات\n• تحليل المشاريع المعقدة\n• التكيف مع أسلوب عملك\n\nسأطرح أسئلة توضيحية لتحقيق أفضل النتائج!",
+        'welcome': "🚀 **مساعد الإنتاجية الذكي**\n\nأنا مساعدك الذكي الذي يستطيع:\n• إنشاء وجدولة المهام\n• تخطيط يومك بالكامل\n• البحث في المواضيع وإنشاء الملاحظات\n• تحليل المشاريع المعقدة\n• فهم الصور والمستندات\n• معالجة الأوامر الصوتية\n• التكيف مع أسلوب عملك\n\nسأطرح أسئلة توضيحية لتحقيق أفضل النتائج!",
         'examples': [
-            "خطط لي يوم عمل كامل: عمل مركز 9-11 صباحاً، اجتماعات 2-3 عصراً، متابعة البريد 4 عصراً",
-            "ابحث عن الحوسبة الكمية وأنشئ ملاحظة دراسة مفصلة",
-            "لدي مشروع كبير due يوم الجمعة - قم بتقسيمه إلى مهام يومية",
-            "أنشئ روتين صباحي: تمارين 7 صباحاً، تأمل 7:30، تخطيط 8 صباحاً",
-            "أنشئ ملاحظة لخطة عملي مع تحليل السوق والتوقعات المالية",
-            "جدول تحضيري للامتحان: أسبوعين، 3 مواد، ساعتين يومياً",
-            "أنشئ مهام لتجديد المنزل: التخطيط، الشراء، التنفيذ"
+            "اعمل مهمة للواجب الساعة 8 مساء بأولوية عالية",
+            "خطط لي جلسة مذاكرة لمدة ساعتين غداً",
+            "أريد التمرين وطبخ العشاء الليلة",
+            "ابحث عن أساسيات الذكاء الاصطناعي",
+            "أنشئ ملاحظة لأفكار مشروعي",
+            "جدول اجتماعات غداً: فريق العمل 10 صباحاً، اتصال عميل 2 عصراً",
+            "أنشئ روتين صباحي: تمارين 7 صباحاً، تأمل 7:30، عمل 8 صباحاً",
+            "خطط لأسبوع كامل من الإثنين إلى الجميع بمهام العمل",
+            "أنشئ خطة مشروع معقدة بمراحل متعددة",
+            "ابحث عن تأثيرات التغير المناخي بملخص 500 كلمة"
         ],
-        'thinking': ["جاري تحليل طلبك...", "جاري تخطيط جدولك...", "جاري البحث في الموضوع...", "جاري إنشاء مهامك...", "جاري تحسين سير العمل..."],
+        'thinking': ["جاري تحليل طلبك...", "جاري تخطيط جدولك...", "جاري إنشاء مهامك...", "جاري تحسين سير العمل..."],
         'tasks_title': "🎯 مهامك",
         'notes_title': "📚 قاعدة المعرفة",
         'input_placeholder': "ماذا تريد أن أساعدك في تحقيقه؟",
@@ -59,84 +83,174 @@ RESPONSES = {
 def index():
     return render_template('index.html')
 
-@app.route('/api/status')
-def api_status():
-    """Check if AI model is responding"""
+@app.route('/api/ai/status')
+def ai_status():
+    """Enhanced AI model status check"""
     try:
-        test_response = ai_handler.test_model()
+        # Test AI model with a simple prompt
+        test_response = ai_handler.check_model_health()
         return jsonify({
             'status': 'online',
             'model': ai_handler.model_name,
-            'response_time': test_response.get('response_time', 0)
+            'response_time': test_response.get('response_time', 0),
+            'capabilities': {
+                'multimodal': True,
+                'voice_processing': True,
+                'image_understanding': True,
+                'context_awareness': True,
+                'smart_scheduling': True
+            }
         })
-    except:
-        return jsonify({'status': 'offline', 'model': ai_handler.model_name}), 500
-
+    except Exception as e:
+        logging.error(f"AI status check failed: {e}")
+        return jsonify({
+            'status': 'offline', 
+            'model': ai_handler.model_name,
+            'error': str(e)
+        }), 500
+@app.route('/api/status')
+def status():
+    """General status endpoint for frontend"""
+    try:
+        response = ai_status()
+        return response
+    except Exception as e:
+        return jsonify({
+            'status': 'offline',
+            'error': str(e)
+        }), 500
+        
 @app.route('/api/chat', methods=['POST'])
-def chat():
+def ai_chat():
+    """Enhanced AI chat endpoint with multimodal support - SYNCHRONOUS VERSION"""
     start_time = time.time()
     
     try:
-        user_message = request.json.get('message', '').strip()
-        message_id = request.json.get('message_id', '')
+        data = request.json
+        user_message = data.get('message', '').strip()
+        message_type = data.get('type', 'text')
+        context_data = data.get('context', {})
+        file_data = data.get('file_data', None)
         
-        if not user_message:
-            return jsonify({'error': 'No message provided'}), 400
+        if not user_message and not file_data:
+            return jsonify({'error': 'No message or file provided'}), 400
         
-        # Get thinking message based on content
-        language = ai_handler.detect_language(user_message)
-        thinking_msg = ai_handler.get_thinking_message(user_message, language)
+        # Process message SYNCHRONOUSLY (no background thread)
+        result = ai_handler.process_multimodal_message(
+            user_message=user_message,
+            message_type=message_type,
+            context_data=context_data,
+            file_data=file_data,
+            database=db
+        )
         
-        # Process message in background thread for better UX
-        def process_message():
-            result = ai_handler.process_message(user_message, db)
-            processing_time = time.time() - start_time
-            
-            # Store result in session for frontend to fetch
-            session[f'result_{message_id}'] = {
-                'result': result,
-                'processing_time': processing_time,
-                'timestamp': time.time()
-            }
-        
-        # Start processing in background
-        thread = threading.Thread(target=process_message)
-        thread.daemon = True
-        thread.start()
+        processing_time = time.time() - start_time
         
         return jsonify({
-            'status': 'processing',
-            'thinking_message': thinking_msg,
-            'message_id': message_id,
-            'language': language
+            'status': 'completed',
+            'result': result,
+            'processing_time': round(processing_time, 2),
+            'ai_metadata': result.get('ai_metadata', {})
         })
         
     except Exception as e:
-        print(f"Error in chat endpoint: {e}")
+        logging.error(f"Error in AI chat endpoint: {e}")
         return jsonify({
             'status': 'error',
-            'message': 'System error occurred'
+            'message': 'AI system error occurred'
         }), 500
 
 @app.route('/api/chat/result/<message_id>')
-def get_chat_result(message_id):
-    """Poll for chat result"""
-    result_data = session.get(f'result_{message_id}')
-    
-    if not result_data:
-        return jsonify({'status': 'processing'})
-    
-    result = result_data['result']
-    processing_time = result_data['processing_time']
-    
-    # Clean up
-    session.pop(f'result_{message_id}', None)
-    
+def get_ai_chat_result(message_id):
+    """Poll for AI chat result - SIMPLIFIED"""
+    # Since we're now synchronous, this endpoint should rarely be called
+    # But we'll keep it for compatibility
     return jsonify({
-        'status': 'completed',
-        'result': result,
-        'processing_time': round(processing_time, 2)
+        'status': 'processing',
+        'message': 'Request is being processed'
     })
+
+@app.route('/api/ai/analyze/image', methods=['POST'])
+def analyze_image():
+    """Analyze image and extract tasks/notes"""
+    try:
+        if 'image' not in request.files:
+            return jsonify({'error': 'No image provided'}), 400
+        
+        image_file = request.files['image']
+        analysis_type = request.form.get('type', 'general')  # tasks, notes, general
+        
+        # Process image with AI
+        result = ai_handler.analyze_image(image_file, analysis_type, db)
+        
+        return jsonify({
+            'status': 'success',
+            'result': result,
+            'analysis_type': analysis_type
+        })
+        
+    except Exception as e:
+        logging.error(f"Image analysis error: {e}")
+        return jsonify({'error': 'Image analysis failed'}), 500
+
+@app.route('/api/ai/process/voice', methods=['POST'])
+def process_voice():
+    """Process voice input"""
+    try:
+        if 'audio' not in request.files:
+            return jsonify({'error': 'No audio provided'}), 400
+        
+        audio_file = request.files['audio']
+        language = request.form.get('language', 'auto')
+        
+        # Process audio with AI
+        result = ai_handler.process_voice_input(audio_file, language, db)
+        
+        return jsonify({
+            'status': 'success',
+            'result': result,
+            'detected_language': result.get('detected_language', language)
+        })
+        
+    except Exception as e:
+        logging.error(f"Voice processing error: {e}")
+        return jsonify({'error': 'Voice processing failed'}), 500
+
+@app.route('/api/ai/suggestions', methods=['POST'])
+def get_ai_suggestions():
+    """Get AI-powered suggestions based on context"""
+    try:
+        data = request.json
+        context = data.get('context', {})
+        suggestion_type = data.get('type', 'tasks')  # tasks, notes, both
+        
+        suggestions = ai_handler.generate_suggestions(context, suggestion_type)
+        
+        return jsonify({
+            'status': 'success',
+            'suggestions': suggestions,
+            'type': suggestion_type
+        })
+        
+    except Exception as e:
+        logging.error(f"Suggestions error: {e}")
+        return jsonify({'error': 'Failed to generate suggestions'}), 500
+
+@app.route('/api/ai/analyze/productivity', methods=['GET'])
+def analyze_productivity():
+    """AI-powered productivity analysis"""
+    try:
+        analysis = ai_handler.analyze_productivity_patterns(db)
+        
+        return jsonify({
+            'status': 'success',
+            'analysis': analysis,
+            'timestamp': time.time()
+        })
+        
+    except Exception as e:
+        logging.error(f"Productivity analysis error: {e}")
+        return jsonify({'error': 'Productivity analysis failed'}), 500
 
 @app.route('/api/config')
 def get_config():
@@ -176,17 +290,8 @@ def get_analytics():
         'total_tasks': len(tasks),
         'total_notes': len(notes),
         'completed_tasks': len([t for t in tasks if t.get('completed', False)]),
-        'high_priority_tasks': len([t for t in tasks if t.get('priority') == 'high']),
-        'recent_activity': len([t for t in tasks if is_recent(t.get('created_at', ''))])
+        'high_priority_tasks': len([t for t in tasks if t.get('priority') == 'high'])
     })
-
-def is_recent(timestamp):
-    from datetime import datetime, timedelta
-    try:
-        created = datetime.fromisoformat(timestamp)
-        return datetime.now() - created < timedelta(hours=24)
-    except:
-        return False
 
 if __name__ == '__main__':
     app.run(debug=True, port=5000, threaded=True)

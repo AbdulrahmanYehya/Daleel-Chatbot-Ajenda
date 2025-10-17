@@ -4,15 +4,103 @@ let currentExampleIndex = 0;
 let exampleInterval;
 let isWaitingForConfirmation = false;
 let currentMessageId = null;
+let recognition = null;
+let isListening = false;
+let lastBotMessage = '';
 
 // Initialize the application
 async function initializeApp() {
     await checkModelStatus();
     await setLanguage('en');
     startExampleRotation();
+    initializeVoiceRecognition();
     
     // Periodically check model status
     setInterval(checkModelStatus, 30000);
+}
+
+// Initialize voice recognition
+function initializeVoiceRecognition() {
+    if ('webkitSpeechRecognition' in window || 'SpeechRecognition' in window) {
+        const SpeechRecognition = window.SpeechRecognition || window.webkitSpeechRecognition;
+        recognition = new SpeechRecognition();
+        recognition.continuous = false;
+        recognition.interimResults = true;
+        recognition.lang = currentLanguage === 'ar' ? 'ar-SA' : 'en-US';
+
+        recognition.onstart = function() {
+            isListening = true;
+            updateVoiceUI(true);
+        };
+
+        recognition.onresult = function(event) {
+            const transcript = Array.from(event.results)
+                .map(result => result[0])
+                .map(result => result.transcript)
+                .join('');
+            
+            document.getElementById('messageInput').value = transcript;
+        };
+
+        recognition.onerror = function(event) {
+            console.error('Speech recognition error:', event.error);
+            updateVoiceUI(false);
+        };
+
+        recognition.onend = function() {
+            isListening = false;
+            updateVoiceUI(false);
+        };
+    } else {
+        console.warn('Speech recognition not supported');
+        document.getElementById('voiceButton').style.display = 'none';
+    }
+}
+
+// Toggle voice recognition
+function toggleVoiceRecognition() {
+    if (!recognition) return;
+
+    if (isListening) {
+        recognition.stop();
+    } else {
+        recognition.start();
+    }
+}
+
+// Update voice UI
+function updateVoiceUI(listening) {
+    const voiceButton = document.getElementById('voiceButton');
+    const voiceStatus = document.getElementById('voiceStatus');
+    const voiceStatusText = document.getElementById('voiceStatusText');
+    
+    if (listening) {
+        voiceButton.classList.add('listening');
+        voiceStatus.style.display = 'flex';
+        voiceStatusText.textContent = currentLanguage === 'ar' ? 'جاري الاستماع...' : 'Listening...';
+    } else {
+        voiceButton.classList.remove('listening');
+        voiceStatus.style.display = 'none';
+    }
+}
+
+// Text-to-Speech
+function speakText(text) {
+    if ('speechSynthesis' in window) {
+        const utterance = new SpeechSynthesisUtterance(text);
+        utterance.lang = currentLanguage === 'ar' ? 'ar-SA' : 'en-US';
+        utterance.rate = 0.9;
+        utterance.pitch = 1;
+        
+        speechSynthesis.speak(utterance);
+    }
+}
+
+// Speak the last bot message
+function speakLastMessage() {
+    if (lastBotMessage) {
+        speakText(lastBotMessage);
+    }
 }
 
 // Check if AI model is online
@@ -47,6 +135,15 @@ async function setLanguage(lang) {
     // Update button states
     document.getElementById('arabicBtn').classList.toggle('active', lang === 'ar');
     document.getElementById('englishBtn').classList.toggle('active', lang === 'en');
+    
+    // Update voice recognition language
+    if (recognition) {
+        recognition.lang = lang === 'ar' ? 'ar-SA' : 'en-US';
+    }
+    
+    // Show/hide speak button based on TTS support
+    const speakButton = document.getElementById('speakButton');
+    speakButton.style.display = 'speechSynthesis' in window ? 'block' : 'none';
     
     // Get configuration from server
     try {
@@ -118,6 +215,11 @@ function addMessage(text, isUser = false, language = 'en') {
     messageDiv.textContent = text;
     container.appendChild(messageDiv);
     container.scrollTop = container.scrollHeight;
+    
+    // Store last bot message for TTS
+    if (!isUser) {
+        lastBotMessage = text;
+    }
 }
 
 function showThinking(thinkingMessage) {
@@ -216,7 +318,7 @@ async function sendMessage() {
     sendButton.disabled = true;
     
     try {
-        // Send message to start processing
+        // Send message and wait for immediate response
         const response = await fetch('/api/chat', {
             method: 'POST',
             headers: { 'Content-Type': 'application/json' },
@@ -226,22 +328,42 @@ async function sendMessage() {
             })
         });
         
-        const initialResponse = await response.json();
+        const data = await response.json();
         
-        if (initialResponse.status === 'processing') {
-            showThinking(initialResponse.thinking_message);
+        // Hide thinking immediately since we got a response
+        hideThinking();
+        
+        if (data.status === 'completed') {
+            // Show the AI response
+            addMessage(data.result.response_message, false, data.result.language);
             
-            // Poll for result
+            // Update tasks and notes immediately
+            await updateItems();
+            
+            // Show processing time
+            if (data.processing_time) {
+                console.log(`Processing time: ${data.processing_time}s`);
+            }
+        } else if (data.status === 'processing') {
+            // Fallback to polling (though this shouldn't happen with synchronous backend)
+            showThinking(data.thinking_message);
             await pollForResult(currentMessageId);
+        } else {
+            // Error case
+            addMessage(
+                currentLanguage === 'ar' ? 'حدث خطأ' : 'Error occurred', 
+                false, 
+                currentLanguage
+            );
         }
         
     } catch (error) {
         hideThinking();
-        addMessage(
-            currentLanguage === 'ar' ? 'حدث خطأ في الإرسال' : 'Error sending message', 
-            false, 
-            currentLanguage
-        );
+        console.error('Send message error:', error);
+        const errorMsg = currentLanguage === 'ar' 
+            ? 'تعذر الاتصال بالخادم' 
+            : 'Failed to connect to server';
+        addMessage(errorMsg, false, currentLanguage);
     } finally {
         // Re-enable send button
         sendText.style.display = 'block';
@@ -251,7 +373,7 @@ async function sendMessage() {
 }
 
 async function pollForResult(messageId, retries = 0) {
-    if (retries > 30) { // 30 seconds timeout
+    if (retries > 10) { // Reduced from 30 to 10 seconds timeout
         hideThinking();
         addMessage(
             currentLanguage === 'ar' ? 'انتهت مهلة المعالجة' : 'Processing timeout',
@@ -272,8 +394,8 @@ async function pollForResult(messageId, retries = 0) {
                 showConfirmation(data.result.research_preview);
             }
             
-            addMessage(data.result.message, false, data.result.language);
-            await updateItems();
+            addMessage(data.result.response_message, false, data.result.language);
+            await updateItems(); // Make sure this is called
             
             // Show processing time
             if (data.processing_time) {
@@ -297,15 +419,23 @@ function handleKeyPress(event) {
 
 async function updateItems() {
     try {
+        console.log('Updating tasks and notes...'); // Debug log
+        
         const [tasksRes, notesRes, analyticsRes] = await Promise.all([
             fetch('/api/tasks'),
             fetch('/api/notes'),
             fetch('/api/analytics')
         ]);
         
+        if (!tasksRes.ok || !notesRes.ok) {
+            throw new Error('Failed to fetch data');
+        }
+        
         const tasks = await tasksRes.json();
         const notes = await notesRes.json();
         const analytics = await analyticsRes.json();
+        
+        console.log(`Loaded ${tasks.length} tasks, ${notes.length} notes`); // Debug log
         
         // Update tasks
         const tasksContainer = document.getElementById('tasksContainer');
@@ -320,7 +450,12 @@ async function updateItems() {
                 </div>
             `;
         } else {
-            tasksContainer.innerHTML = tasks.map(task => `
+            tasksContainer.innerHTML = tasks.map(task => {
+                const taskDate = task.due_date ? new Date(task.due_date).toLocaleDateString() : '';
+                const dateRange = task.start_date && task.end_date ? 
+                    `${new Date(task.start_date).toLocaleDateString()} - ${new Date(task.end_date).toLocaleDateString()}` : '';
+                
+                return `
                 <div class="task-card" dir="${task.language === 'ar' ? 'rtl' : 'ltr'}">
                     <div class="task-header">
                         <h3 class="task-title">${task.title}</h3>
@@ -340,10 +475,14 @@ async function updateItems() {
                             ${task.due_time || ''}
                             ${task.duration ? ` • ${task.duration}` : ''}
                         </div>
-                        ${task.due_date ? `<div class="task-date">${task.due_date}</div>` : ''}
+                        <div class="task-date">
+                            ${dateRange || taskDate}
+                            ${task.category ? ` • ${task.category}` : ''}
+                        </div>
                     </div>
                 </div>
-            `).join('');
+                `;
+            }).join('');
         }
         
         // Update notes
@@ -359,7 +498,13 @@ async function updateItems() {
                 </div>
             `;
         } else {
-            notesContainer.innerHTML = notes.map(note => `
+            notesContainer.innerHTML = notes.map(note => {
+                const stats = [];
+                if (note.word_count) stats.push(`📊 ${note.word_count} words`);
+                if (note.paragraph_count) stats.push(`📝 ${note.paragraph_count} paragraphs`);
+                if (note.character_count) stats.push(`🔤 ${note.character_count} chars`);
+                
+                return `
                 <div class="note-card" dir="${note.language === 'ar' ? 'rtl' : 'ltr'}">
                     <div class="note-header">
                         <h3 class="note-title">${note.title}</h3>
@@ -367,14 +512,22 @@ async function updateItems() {
                     </div>
                     <div class="note-content">${note.content}</div>
                     <div class="note-category">${note.category}</div>
+                    ${stats.length > 0 ? `
+                    <div class="note-stats">
+                        ${stats.map(stat => `<span class="stat-badge">${stat}</span>`).join('')}
+                    </div>
+                    ` : ''}
                 </div>
-            `).join('');
+                `;
+            }).join('');
         }
         
         // Update analytics
         document.getElementById('totalTasks').textContent = analytics.total_tasks;
         document.getElementById('totalNotes').textContent = analytics.total_notes;
         document.getElementById('completedTasks').textContent = analytics.completed_tasks;
+        
+        console.log('Update completed successfully'); // Debug log
         
     } catch (error) {
         console.error('Error updating items:', error);

@@ -329,6 +329,7 @@ body {
 .input-container {
     display: flex;
     gap: 10px;
+    align-items: center;
 }
 
 input[type="text"] {
@@ -343,6 +344,76 @@ input[type="text"] {
 
 input[type="text"]:focus {
     border-color: #667eea;
+}
+
+/* Voice Controls */
+.voice-controls {
+    display: flex;
+    gap: 5px;
+}
+
+.btn-voice, .btn-speak {
+    padding: 12px;
+    border: 2px solid #e1e8ed;
+    background: white;
+    border-radius: 50%;
+    cursor: pointer;
+    font-size: 16px;
+    transition: all 0.3s ease;
+    width: 50px;
+    height: 50px;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+}
+
+.btn-voice:hover, .btn-speak:hover {
+    border-color: #667eea;
+    background: #f0f4ff;
+}
+
+.btn-voice.listening {
+    background: #ffebee;
+    border-color: #e74c3c;
+    animation: pulse-red 1s infinite;
+}
+
+@keyframes pulse-red {
+    0% { box-shadow: 0 0 0 0 rgba(231, 76, 60, 0.4); }
+    70% { box-shadow: 0 0 0 10px rgba(231, 76, 60, 0); }
+    100% { box-shadow: 0 0 0 0 rgba(231, 76, 60, 0); }
+}
+
+.voice-status {
+    display: flex;
+    align-items: center;
+    gap: 10px;
+    padding: 10px;
+    background: #f8f9fa;
+    border-radius: 8px;
+    margin-top: 10px;
+}
+
+.voice-indicator {
+    display: flex;
+    gap: 3px;
+}
+
+.voice-dot {
+    width: 6px;
+    height: 6px;
+    border-radius: 50%;
+    background: #667eea;
+    animation: voicePulse 1.5s infinite ease-in-out;
+}
+
+.voice-dot:nth-child(1) { animation-delay: 0s; }
+.voice-dot:nth-child(2) { animation-delay: 0.2s; }
+.voice-dot:nth-child(3) { animation-delay: 0.4s; }
+
+@keyframes voicePulse {
+    0%, 100% { transform: scale(1); opacity: 1; }
+    50% { transform: scale(1.5); opacity: 0.7; }
 }
 
 .btn-send {
@@ -557,6 +628,20 @@ input[type="text"]:focus {
     font-style: italic;
 }
 
+.note-stats {
+    display: flex;
+    gap: 10px;
+    font-size: 0.7em;
+    color: #666;
+    margin-top: 8px;
+}
+
+.stat-badge {
+    background: #f0f0f0;
+    padding: 2px 6px;
+    border-radius: 8px;
+}
+
 /* Footer */
 .competition-footer {
     padding: 20px;
@@ -673,5 +758,16 @@ input[type="text"]:focus {
     
     .analytics {
         justify-content: center;
+    }
+    
+    .input-container {
+        flex-wrap: wrap;
+    }
+    
+    .voice-controls {
+        order: -1;
+        width: 100%;
+        justify-content: center;
+        margin-bottom: 10px;
     }
 }

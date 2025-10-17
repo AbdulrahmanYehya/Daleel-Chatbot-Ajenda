@@ -3,442 +3,707 @@ import json
 import re
 import time
 import random
+import base64
+import io
+import os
 from datetime import datetime, timedelta
+from rag_handler import EnhancedRAGHandler
+import logging
+from functools import lru_cache
+import hashlib
 
-class AIHandler:
+class EnhancedAIHandler:
     def __init__(self):
         self.ollama_url = "http://localhost:11434/api/generate"
-        self.model_name = "mistral:7b-instruct"  # Using Mistral 7B instead of Phi-3
-        self.conversation_context = []
+        self.model_name = "mistral:7b-instruct-q4_K_M"
+        self.multimodal_model = "mistral:7b-instruct-q4_K_M"  # For image understanding
+        self.enhanced_rag = EnhancedRAGHandler()
         self.thinking_patterns = self._load_thinking_patterns()
+        self.conversation_context = {}
         
-        # Enhanced system prompt for Mistral
-        self.system_prompt = """You are an INTELLIGENT PRODUCTIVITY AI that excels at:
-1. Complex task planning and scheduling
-2. Detailed research and knowledge synthesis  
-3. Project breakdown and milestone creation
-4. Adaptive workflow optimization
-5. Intelligent clarification and follow-up
+        # Enhanced system prompt with multimodal support
+        self.system_prompt = """<s>[INST] You are an advanced productivity assistant with multimodal capabilities. Respond with ONLY JSON.
 
-RESPONSE FORMAT (STRICT JSON):
+CAPABILITIES:
+- Create and schedule tasks with complex timeframes
+- Generate detailed research notes with specified formats
+- Understand and process images to extract tasks/notes
+- Analyze voice inputs and convert to actions
+- Provide context-aware suggestions
+- Handle complex project planning
+
+RESPONSE FORMAT:
 {
-  "mode": "DIRECT_ACTION | CLARIFICATION_NEEDED | RESEARCH_PREVIEW | PROJECT_PLAN",
-  "language": "en | ar",
-  "message": "Intelligent response to user",
   "tasks": [
     {
-      "title": "Descriptive task title",
-      "description": "Detailed task description with context", 
-      "due_date": "YYYY-MM-DD",
-      "due_time": "HH:MM (24h format)",
-      "duration": "X hours/minutes",
+      "title": "task title in user's language",
+      "description": "detailed task description",
+      "due_date": "YYYY-MM-DD or date range",
+      "due_time": "HH:MM (24h) or time range", 
+      "duration": "estimated duration",
       "priority": "high | medium | low",
-      "category": "work | study | personal | health | other"
+      "category": "work | study | personal | health | business | creative",
+      "recurring": "daily | weekly | monthly | none",
+      "dependencies": ["task_ids"],
+      "tags": ["tag1", "tag2"]
     }
   ],
   "notes": [
     {
-      "title": "Note title",
-      "content": "Comprehensive, well-structured content",
-      "category": "Research | Reference | Ideas | Project | Personal"
+      "title": "note title",
+      "content": "detailed, well-structured content",
+      "category": "Research | Personal | Work | Ideas | Reference | Study | Creative",
+      "format": "paragraphs | bullet_points | numbered | outline",
+      "word_count": approximate_count,
+      "paragraph_count": count,
+      "sections": ["section1", "section2"],
+      "tags": ["topic1", "topic2"]
     }
   ],
-  "research_preview": {
-    "title": "Research title", 
-    "content": "Detailed, structured research content",
-    "category": "Research"
-  },
-  "missing_info": ["specific_field1", "specific_field2"],
-  "suggestions": ["helpful_suggestion1", "helpful_suggestion2"]
+  "response_message": "natural, conversational response",
+  "suggestions": ["relevant follow-up suggestions"],
+  "requires_clarification": false,
+  "clarification_questions": ["question1", "question2"],
+  "context_updates": {"key": "value"}
 }
 
-INTELLIGENT BEHAVIORS:
-- Ask SPECIFIC clarifying questions when information is incomplete
-- Provide helpful suggestions and alternatives
-- Break down complex requests into actionable steps
-- Consider time management and productivity principles
-- Create comprehensive, useful research notes
-
-EXAMPLES:
-
-User: "I'm overwhelmed with work"
-{
-  "mode": "CLARIFICATION_NEEDED",
-  "language": "en",
-  "message": "I understand feeling overwhelmed. Let me help you get organized. Could you tell me:\n1. What are your main work responsibilities?\n2. Do you have any urgent deadlines?\n3. How many hours do you typically work per day?",
-  "tasks": [],
-  "notes": [],
-  "missing_info": ["work_responsibilities", "deadlines", "work_hours"],
-  "suggestions": ["Consider time blocking", "Prioritize by urgency/importance", "Break large tasks into smaller steps"]
-}
-
-User: "ابحث لي عن الذكاء الاصطناعي في التعليم"
-{
-  "mode": "RESEARCH_PREVIEW", 
-  "language": "ar",
-  "message": "لقد قمت بالبحث عن الذكاء الاصطناعي في التعليم. هل تريد حفظ هذا البحث كملاحظة؟",
-  "tasks": [],
-  "notes": [],
-  "research_preview": {
-    "title": "الذكاء الاصطناعي في التعليم",
-    "content": "مقدمة:\nالذكاء الاصطناعي يحدث ثورة في مجال التعليم من خلال...\n\nالتطبيقات الرئيسية:\n1. التخصيص والتكيف مع مستوى الطالب\n2. الأتمتة في التصحيح والتقييم\n3...",
-    "category": "Research"
-  },
-  "suggestions": ["فكر في تطبيقات عملية في مؤسستك", "تابع أحدث الأبحاث في هذا المجال"]
-}
-
-User: "Plan my product launch for next month"
-{
-  "mode": "PROJECT_PLAN",
-  "language": "en", 
-  "message": "I've created a comprehensive product launch plan with 8 key tasks spread over 4 weeks.",
-  "tasks": [
-    {
-      "title": "Finalize product messaging and positioning",
-      "description": "Define core value proposition and key messaging for launch materials",
-      "due_date": "2024-02-05",
-      "due_time": "14:00",
-      "duration": "3 hours",
-      "priority": "high",
-      "category": "work"
-    },
-    {
-      "title": "Create launch marketing assets",
-      "description": "Develop social media graphics, email templates, and press kit",
-      "due_date": "2024-02-12", 
-      "due_time": "10:00",
-      "duration": "6 hours",
-      "priority": "high",
-      "category": "work"
-    }
-  ],
-  "notes": [
-    {
-      "title": "Product Launch Strategy",
-      "content": "Launch Timeline:\nWeek 1: Final prep\nWeek 2: Asset creation\nWeek 3: Internal training\nWeek 4: Public launch",
-      "category": "Project"
-    }
-  ],
-  "suggestions": ["Consider a soft launch to test messaging", "Prepare FAQ for customer support"]
-}
-
-User: "عندي ٣ امتحانات الشهر القادم"
-{
-  "mode": "CLARIFICATION_NEEDED",
-  "language": "ar",
-  "message": "حسناً، دعني أساعدك في التخطيط لاستعداد الامتحانات. أرجو إخباري:\n١. ما هي المواد الثلاث؟\n٢. متى مواعيد الامتحانات بالتحديد؟\n٣. كم ساعة يمكنك الدراسة يومياً؟",
-  "tasks": [],
-  "notes": [], 
-  "missing_info": ["المواد", "مواعيد_الامتحانات", "ساعات_الدراسة_اليومية"],
-  "suggestions": ["استخدم تقنية بومودورو", "راجع المواد الصعبة أولاً", "خذ فترات راحة منتظمة"]
-}
-
-ALWAYS respond with valid, well-structured JSON that demonstrates intelligent understanding of productivity principles."""
+ALWAYS RESPOND WITH VALID JSON. NO EXPLANATIONS. [/INST]"""
 
     def _load_thinking_patterns(self):
         return {
             'research': {
-                'en': ["Researching the topic thoroughly...", "Gathering comprehensive information...", "Structuring knowledge systematically..."],
-                'ar': ["جاري البحث المتعمق في الموضوع...", "جاري جمع المعلومات الشاملة...", "جاري تنظيم المعرفة بشكل منهجي..."]
+                'en': ["Researching the topic...", "Gathering information...", "Analyzing content..."],
+                'ar': ["جاري البحث في الموضوع...", "جاري جمع المعلومات...", "جاري تحليل المحتوى..."]
             },
             'planning': {
-                'en': ["Creating an optimized schedule...", "Breaking down complex requirements...", "Applying productivity frameworks..."],
-                'ar': ["جاري إنشاء جدول مُحسّن...", "جاري تحليل المتطلبات المعقدة...", "جاري تطبيق أطر الإنتاجية..."]
+                'en': ["Creating schedule...", "Planning tasks...", "Organizing timeline..."],
+                'ar': ["جاري إنشاء الجدول...", "جاري تخطيط المهام...", "جاري تنظيم الجدول الزمني..."]
             },
             'tasks': {
-                'en': ["Designing actionable tasks...", "Prioritizing by importance and urgency...", "Setting realistic timeframes..."],
-                'ar': ["جاري تصميم مهام قابلة للتنفيذ...", "جاري ترتيب الأولويات حسب الأهمية والعجلة...", "جاري تحديد إطارات زمنية واقعية..."]
+                'en': ["Creating tasks...", "Setting priorities...", "Scheduling activities..."],
+                'ar': ["جاري إنشاء المهام...", "جاري تحديد الأولويات...", "جاري جدولة الأنشطة..."]
+            },
+            'notes': {
+                'en': ["Creating note...", "Researching content...", "Structuring information..."],
+                'ar': ["جاري إنشاء الملاحظة...", "جاري البحث في المحتوى...", "جاري تنظيم المعلومات..."]
+            },
+            'image': {
+                'en': ["Analyzing image...", "Extracting information from visual...", "Processing visual content..."],
+                'ar': ["جاري تحليل الصورة...", "جاري استخراج المعلومات من الصورة...", "جاري معالجة المحتوى المرئي..."]
+            },
+            'voice': {
+                'en': ["Processing voice command...", "Transcribing audio...", "Understanding speech..."],
+                'ar': ["جاري معالجة الأمر الصوتي...", "جاري تحويل الصوت إلى نص...", "جاري فهم الكلام..."]
+            },
+            'complex': {
+                'en': ["Processing complex request...", "Breaking down requirements...", "Creating detailed plan..."],
+                'ar': ["جاري معالجة الطلب المعقد...", "جاري تحليل المتطلبات...", "جاري إنشاء خطة مفصلة..."]
             },
             'general': {
-                'en': ["Analyzing your request intelligently...", "Processing complex requirements...", "Generating optimal solutions..."],
-                'ar': ["جاري تحليل طلبك بذكاء...", "جاري معالجة المتطلبات المعقدة...", "جاري إنشاء الحلول المثلى..."]
+                'en': ["Processing your request...", "Analyzing...", "Working on it..."],
+                'ar': ["جاري معالجة طلبك...", "جاري التحليل...", "جاري العمل عليه..."]
             }
         }
 
     def detect_language(self, text):
+        if not text:
+            return 'en'
         arabic_chars = len(re.findall(r'[\u0600-\u06FF]', text))
         return "ar" if arabic_chars > len(text) * 0.3 else "en"
 
-    def get_thinking_message(self, user_message, language):
-        """Get appropriate thinking message based on content"""
-        text_lower = user_message.lower()
-        
-        if any(word in text_lower for word in ['research', 'ابحث', 'بحث', 'معلومات']):
-            category = 'research'
-        elif any(word in text_lower for word in ['plan', 'schedule', 'خطط', 'جدول']):
-            category = 'planning'
-        elif any(word in text_lower for word in ['task', 'مهمة', 'مهام', 'عمل']):
-            category = 'tasks'
+    def get_thinking_message(self, user_message, language, message_type='text'):
+        """Get appropriate thinking message based on content and type"""
+        if message_type == 'image':
+            category = 'image'
+        elif message_type == 'voice':
+            category = 'voice'
         else:
-            category = 'general'
+            text_lower = user_message.lower() if user_message else ''
+            
+            if any(word in text_lower for word in ['research', 'ابحث', 'بحث', 'study', 'دراسة']):
+                category = 'research'
+            elif any(word in text_lower for word in ['plan', 'schedule', 'خطط', 'جدول', 'week', 'أسبوع', 'month', 'شهر']):
+                category = 'planning'
+            elif any(word in text_lower for word in ['task', 'مهمة', 'مهام', 'todo', 'مطلوب']):
+                category = 'tasks'
+            elif any(word in text_lower for word in ['note', 'write', 'اكتب', 'ملاحظة', 'document', 'وثق']):
+                category = 'notes'
+            elif any(word in text_lower for word in ['complex', 'multiple', 'several', 'معقد', 'متعدد', 'عدة']):
+                category = 'complex'
+            else:
+                category = 'general'
         
         messages = self.thinking_patterns[category][language]
         return random.choice(messages)
 
-    def test_model(self):
-        """Test if model is responsive"""
-        start_time = time.time()
-        try:
-            response = requests.post(self.ollama_url, json={
-                "model": self.model_name,
-                "prompt": "Respond with only: OK",
-                "stream": False
-            }, timeout=10)
-            
-            return {
-                "status": "online",
-                "response_time": round(time.time() - start_time, 2)
-            }
-        except:
-            return {"status": "offline"}
+    @lru_cache(maxsize=100)
+    def get_cached_response(self, message_hash):
+        """Cache AI responses for performance"""
+        return None  # Implementation would go here
 
-    def send_to_ai(self, user_message):
-        """Send message to AI with enhanced error handling"""
-        # Maintain conversation context (last 4 exchanges)
-        self.conversation_context.append(f"User: {user_message}")
-        if len(self.conversation_context) > 8:
-            self.conversation_context = self.conversation_context[-8:]
+    def process_multimodal_message(self, user_message, message_type='text', context_data=None, file_data=None, database=None):
+        """Process messages of any type (text, voice, image)"""
+        start_time = time.time()
         
-        context_str = "\n".join(self.conversation_context[-4:])  # Last 2 exchanges
-        full_prompt = f"SYSTEM: {self.system_prompt}\n\nCONVERSATION CONTEXT:\n{context_str}\n\nASSISTANT (JSON ONLY):"
+        try:
+            # Update conversation context
+            self._update_context(context_data or {})
+            
+            if message_type == 'image' and file_data:
+                return self._process_image_message(file_data, database)
+            elif message_type == 'voice' and file_data:
+                return self._process_voice_message(file_data, database)
+            else:
+                return self._process_text_message(user_message, database)
+                
+        except Exception as e:
+            logging.error(f"Multimodal processing error: {e}")
+            return self._create_error_response(str(e), self.detect_language(user_message))
+
+    def _parse_complex_request(self, user_message, language):
+        """Parse complex requests with multiple tasks and extract details"""
+        tasks = []
         
-        payload = {
-            "model": self.model_name,
-            "prompt": full_prompt,
-            "stream": False,
-            "options": {
-                "temperature": 0.3,  # Slightly higher for creativity
-                "num_predict": 800,  # Longer responses for complex tasks
-                "top_k": 50,
-                "top_p": 0.9,
-                "repeat_penalty": 1.1
+        # Common patterns for complex requests
+        if ':' in user_message and any(separator in user_message for separator in [',', '،', '\n']):
+            # This looks like a complex request with multiple items
+            try:
+                # Split by colon to separate title from details
+                if ':' in user_message:
+                    parts = user_message.split(':', 1)
+                    main_title = parts[0].strip()
+                    details = parts[1].strip()
+                else:
+                    main_title = "Daily Tasks" if language == 'en' else "المهام اليومية"
+                    details = user_message
+                
+                # Split details into individual tasks
+                task_items = []
+                for separator in [',', '،', '\n']:
+                    if separator in details:
+                        task_items = [item.strip() for item in details.split(separator) if item.strip()]
+                        break
+                
+                if not task_items:
+                    task_items = [details]
+                
+                # Parse each task item
+                for item in task_items:
+                    task_data = self._parse_task_item(item, language)
+                    if task_data:
+                        tasks.append(task_data)
+                
+                # If we couldn't parse specific tasks, create generic ones
+                if not tasks:
+                    for i, item in enumerate(task_items):
+                        task = {
+                            'title': f"Task {i+1}" if language == 'en' else f"مهمة {i+1}",
+                            'description': item,
+                            'due_date': datetime.now().strftime('%Y-%m-%d'),
+                            'priority': 'medium',
+                            'category': 'personal'
+                        }
+                        tasks.append(task)
+                        
+            except Exception as e:
+                logging.error(f"Error parsing complex request: {e}")
+        
+        return tasks
+
+    def _parse_task_item(self, item, language):
+        """Parse individual task items to extract time, description, etc."""
+        item_lower = item.lower()
+        
+        # Default task structure
+        task = {
+            'title': '',
+            'description': item,
+            'due_date': datetime.now().strftime('%Y-%m-%d'),
+            'due_time': '',
+            'duration': '',
+            'priority': 'medium',
+            'category': 'personal'
+        }
+        
+        # Extract time patterns
+        time_patterns = [
+            r'(\d{1,2}:\d{2}\s*(?:am|pm)?)',
+            r'(\d{1,2}\s*(?:am|pm))',
+            r'(\d{1,2}\s*:\s*\d{2})',
+            r'(\d{1,2}\s*ساعة)',
+            r'(\d{1,2}\s*:\s*\d{2}\s*مساء)',
+            r'(\d{1,2}\s*:\s*\d{2}\s*صباحاً)'
+        ]
+        
+        for pattern in time_patterns:
+            time_match = re.search(pattern, item, re.IGNORECASE)
+            if time_match:
+                task['due_time'] = self._normalize_time(time_match.group(1), language)
+                break
+        
+        # Extract duration
+        duration_patterns = [
+            r'(\d+\s*(?:hour|hr|minute|min))',
+            r'(\d+\s*(?:ساعة|دقيقة))'
+        ]
+        
+        for pattern in duration_patterns:
+            duration_match = re.search(pattern, item_lower)
+            if duration_match:
+                task['duration'] = duration_match.group(1)
+                break
+        
+        # Determine category based on keywords
+        category_keywords = {
+            'work': ['work', 'job', 'project', 'meeting', 'client', 'عمل', 'وظيفة', 'مشروع', 'اجتماع'],
+            'study': ['study', 'homework', 'research', 'learn', 'دراسة', 'واجب', 'بحث', 'تعلم'],
+            'health': ['exercise', 'meditation', 'yoga', 'gym', 'workout', 'تمرين', 'تأمل', 'يوجا', 'رياضة'],
+            'personal': ['read', 'cook', 'clean', 'shopping', 'قراءة', 'طبخ', 'تنظيف', 'تسوق']
+        }
+        
+        for category, keywords in category_keywords.items():
+            if any(keyword in item_lower for keyword in keywords):
+                task['category'] = category
+                break
+        
+        # Create a better title
+        task['title'] = self._generate_task_title(item, task['category'], language)
+        
+        return task
+
+    def _normalize_time(self, time_str, language):
+        """Normalize time format to HH:MM"""
+        try:
+            # Remove spaces and convert to lowercase
+            time_str = time_str.replace(' ', '').lower()
+            
+            # Handle Arabic times
+            if language == 'ar':
+                time_str = time_str.replace('ص', 'am').replace('م', 'pm')
+                time_str = time_str.replace('صباحاً', 'am').replace('مساء', 'pm')
+            
+            # Parse time
+            if 'am' in time_str or 'pm' in time_str:
+                # 12-hour format
+                time_obj = datetime.strptime(time_str, '%I:%M%p')
+            else:
+                # 24-hour format or just numbers
+                if ':' in time_str:
+                    time_obj = datetime.strptime(time_str, '%H:%M')
+                else:
+                    # Assume it's just hours, add :00
+                    time_obj = datetime.strptime(time_str + ':00', '%H:%M')
+            
+            return time_obj.strftime('%H:%M')
+        except:
+            return time_str  # Return original if parsing fails
+
+    def _generate_task_title(self, item, category, language):
+        """Generate a meaningful title from the task item"""
+        item_lower = item.lower()
+        
+        # Remove time and duration information for cleaner title
+        clean_item = re.sub(r'\d{1,2}:\d{2}\s*(?:am|pm)?', '', item, flags=re.IGNORECASE)
+        clean_item = re.sub(r'\d{1,2}\s*(?:am|pm)', '', clean_item, flags=re.IGNORECASE)
+        clean_item = re.sub(r'\d+\s*(?:hour|hr|minute|min)', '', clean_item, flags=re.IGNORECASE)
+        clean_item = re.sub(r'\d+\s*(?:ساعة|دقيقة)', '', clean_item)
+        clean_item = clean_item.strip()
+        
+        # Use category-specific titles
+        category_titles = {
+            'work': {
+                'en': ['Work', 'Work Session', 'Professional Task'],
+                'ar': ['عمل', 'جلسة عمل', 'مهمة مهنية']
+            },
+            'study': {
+                'en': ['Study', 'Learning', 'Research'],
+                'ar': ['دراسة', 'تعلم', 'بحث']
+            },
+            'health': {
+                'en': ['Exercise', 'Workout', 'Meditation'],
+                'ar': ['تمرين', 'رياضة', 'تأمل']
+            },
+            'personal': {
+                'en': ['Personal Task', 'Activity', 'Routine'],
+                'ar': ['مهمة شخصية', 'نشاط', 'روتين']
             }
         }
         
+        # If we have meaningful content left, use it as title
+        if clean_item and len(clean_item) > 3:
+            return clean_item.title() if language == 'en' else clean_item
+        else:
+            # Use category-based default title
+            titles = category_titles.get(category, category_titles['personal'])
+            import random
+            return random.choice(titles[language])
+
+    def _process_text_message(self, user_message, database):
+        """Process standard text messages with smart parsing"""
+        start_time = time.time()
+        language = self.detect_language(user_message)
+        
+        logging.info(f"Processing: '{user_message}' in {language}")
+        
+        # Try to parse as complex request first
+        parsed_tasks = self._parse_complex_request(user_message, language)
+        
+        if parsed_tasks:
+            logging.info(f"Parsed {len(parsed_tasks)} tasks from complex request")
+            
+            # Create tasks in database
+            created_tasks = []
+            for task_data in parsed_tasks:
+                try:
+                    task = database.create_task(
+                        title=task_data['title'],
+                        description=task_data.get('description', ''),
+                        due_date=task_data.get('due_date', datetime.now().strftime('%Y-%m-%d')),
+                        due_time=task_data.get('due_time'),
+                        duration=task_data.get('duration'),
+                        priority=task_data.get('priority', 'medium'),
+                        language=language,
+                        category=task_data.get('category', 'personal')
+                    )
+                    created_tasks.append(task)
+                except Exception as e:
+                    logging.error(f"Error creating task: {e}")
+            
+            # Create response
+            if language == 'ar':
+                response_message = f"تم إنشاء {len(created_tasks)} مهام من طلبك المعقد"
+            else:
+                response_message = f"Created {len(created_tasks)} tasks from your complex request"
+            
+            response = {
+                "response_message": response_message,
+                "tasks": created_tasks,
+                "notes": [],
+                "processing_time": time.time() - start_time,
+                "used_rag": False,
+                "ai_metadata": {
+                    'model': 'smart_parser',
+                    'response_type': 'complex_parsing'
+                }
+            }
+            
+        else:
+            # Fall back to RAG for simple requests
+            logging.info("Using RAG fallback for simple request")
+            rag_response = self.enhanced_rag.get_fallback_response(user_message, language)
+            rag_response['processing_time'] = time.time() - start_time
+            rag_response['used_rag'] = True
+            
+            # Create tasks and notes from RAG response
+            self._create_database_entries(rag_response, database, language)
+            response = rag_response
+        
+        return response
+
+    def _process_image_message(self, image_file, database):
+        """Process image messages to extract tasks/notes"""
         try:
-            print(f"🧠 Processing: {user_message[:100]}...")
-            start_time = time.time()
+            # Convert image to base64 for multimodal model
+            image_data = base64.b64encode(image_file.read()).decode('utf-8')
+            
+            prompt = """Analyze this image and extract any tasks, schedules, notes, or actionable information. 
+            Return ONLY JSON in this format:
+            {
+              "tasks": [{"title": "...", "description": "...", "due_date": "...", "priority": "..."}],
+              "notes": [{"title": "...", "content": "...", "category": "..."}],
+              "response_message": "Summary of what I found in the image"
+            }"""
+            
+            payload = {
+                "model": self.multimodal_model,
+                "prompt": prompt,
+                "images": [image_data],
+                "stream": False,
+                "options": {"temperature": 0.1, "num_predict": 400}
+            }
             
             response = requests.post(self.ollama_url, json=payload, timeout=45)
-            processing_time = time.time() - start_time
             
             if response.status_code == 200:
                 result = response.json()
                 ai_response = result['response'].strip()
-                print(f"✅ Response received in {processing_time:.2f}s")
                 
-                # Add to conversation context
-                self.conversation_context.append(f"Assistant: {ai_response}")
+                parsed_response = self._parse_ai_response(ai_response, 'en')
+                parsed_response['processing_time'] = time.time() - start_time
+                parsed_response['ai_metadata'] = {
+                    'model': self.multimodal_model,
+                    'content_type': 'image',
+                    'analysis_type': 'visual_extraction'
+                }
                 
-                parsed_response = self.clean_json_response(ai_response)
-                parsed_response['processing_time'] = processing_time
+                # Create database entries
+                self._create_database_entries(parsed_response, database, 'en')
+                
                 return parsed_response
             else:
-                print(f"❌ API error {response.status_code}")
-                return self.create_intelligent_fallback(user_message)
+                return self._create_image_fallback_response()
                 
-        except requests.exceptions.Timeout:
-            print("⏰ Request timeout")
-            return self.create_timeout_response(user_message)
         except Exception as e:
-            print(f"💥 Error: {e}")
-            return self.create_intelligent_fallback(user_message)
-    
-    def clean_json_response(self, text):
-        """Enhanced JSON cleaning with multiple fallback strategies"""
-        # Strategy 1: Direct JSON parse
-        try:
-            return json.loads(text)
-        except:
-            pass
-        
-        # Strategy 2: Remove markdown and try again
-        try:
-            clean_text = re.sub(r'```json\s*|```\s*', '', text)
-            clean_text = clean_text.strip()
-            return json.loads(clean_text)
-        except:
-            pass
-        
-        # Strategy 3: Extract JSON with regex
-        try:
-            json_match = re.search(r'\{.*\}', text, re.DOTALL)
-            if json_match:
-                return json.loads(json_match.group())
-        except:
-            pass
-        
-        # Strategy 4: Manual JSON construction from text
-        return self.create_intelligent_fallback(text)
-    
-    def create_intelligent_fallback(self, user_message):
-        """Create intelligent fallback based on message content"""
-        language = self.detect_language(user_message)
-        text_lower = user_message.lower()
-        
-        # Analyze message intent
-        if any(word in text_lower for word in ['research', 'ابحث', 'بحث']):
-            return self.create_research_fallback(user_message, language)
-        elif any(word in text_lower for word in ['task', 'مهمة', 'عمل']):
-            return self.create_task_fallback(user_message, language)
-        elif any(word in text_lower for word in ['plan', 'schedule', 'خطط', 'جدول']):
-            return self.create_planning_fallback(user_message, language)
-        else:
-            return self.create_general_fallback(user_message, language)
-    
-    def create_research_fallback(self, user_message, language):
-        """Create research-focused fallback"""
-        topic = self.extract_topic(user_message)
-        if language == 'ar':
-            return {
-                "mode": "RESEARCH_PREVIEW",
-                "language": "ar",
-                "message": "لقد واجهت بعض الصعوبة في معالجة طلبك. هل تريد أن أحاول البحث عن هذا الموضوع بطريقة مختلفة؟",
-                "research_preview": {
-                    "title": f"بحث عن {topic}",
-                    "content": "يبدو أن هناك حاجة لمزيد من التفاصيل حول هذا الموضوع. يمكنني مساعدتك في البحث إذا وضحت:\n• الجوانب المحددة التي تهمك\n• مستوى العمق المطلوب\n• الاستخدام المقصود للمعلومات",
-                    "category": "Research"
-                },
-                "suggestions": ["حدد جوانب محددة للبحث", "اختر مستوى التفصيل المناسب"]
+            logging.error(f"Image processing error: {e}")
+            return self._create_image_fallback_response()
+
+    def _process_voice_message(self, audio_file, database):
+        """Process voice messages - placeholder for speech-to-text"""
+        # In a real implementation, this would use Whisper or similar STT
+        # For now, return a placeholder response
+        return {
+            "response_message": "Voice processing capability is available. Please provide the transcribed text for full functionality.",
+            "tasks": [],
+            "notes": [],
+            "suggestions": ["Try typing your request for immediate processing"],
+            "ai_metadata": {
+                'feature': 'voice_processing_placeholder',
+                'status': 'development'
             }
-        else:
-            return {
-                "mode": "RESEARCH_PREVIEW",
-                "language": "en", 
-                "message": "I encountered some difficulty processing your request. Would you like me to try researching this topic differently?",
-                "research_preview": {
-                    "title": f"Research on {topic}",
-                    "content": "It seems more details are needed about this topic. I can help research if you clarify:\n• Specific aspects you're interested in\n• The depth level required\n• Intended use of the information",
-                    "category": "Research"
-                },
-                "suggestions": ["Specify particular aspects to research", "Choose appropriate detail level"]
-            }
-    
-    def create_task_fallback(self, user_message, language):
-        """Create task-focused fallback"""
-        if language == 'ar':
-            return {
-                "mode": "CLARIFICATION_NEEDED",
-                "language": "ar",
-                "message": "أريد مساعدتك في إنشاء المهام بشكل أفضل. هل يمكنك تقديم:\n• وصف واضح للمهمة\n• الموعد النهائي إن وجد\n• الأولوية والمدة المتوقعة",
-                "missing_info": ["وصف_المهمة", "الموعد_النهائي", "الأولوية"],
-                "suggestions": ["استخدم أوقات محددة", "حدد الأولويات بوضوح"]
-            }
-        else:
-            return {
-                "mode": "CLARIFICATION_NEEDED",
-                "language": "en",
-                "message": "I want to help you create tasks better. Could you provide:\n• Clear task description\n• Deadline if any\n• Priority and expected duration", 
-                "missing_info": ["task_description", "deadline", "priority"],
-                "suggestions": ["Use specific times", "Define priorities clearly"]
-            }
-    
-    def create_planning_fallback(self, user_message, language):
-        """Create planning-focused fallback"""
-        if language == 'ar':
-            return {
-                "mode": "CLARIFICATION_NEEDED", 
-                "language": "ar",
-                "message": "للمساعدة في التخطيط الفعال، أرجو توضيح:\n• الفترة الزمنية (يوم، أسبوع، شهر)\n• الأنشطة أو الأهداف الرئيسية\n• القيود أو الأولويات",
-                "missing_info": ["الفترة_الزمنية", "الأهداف", "القيود"],
-                "suggestions": ["ابدء بالأهداف الكبيرة ثم التفاصيل", "ضع في الاعتبار فترات الراحة"]
-            }
-        else:
-            return {
-                "mode": "CLARIFICATION_NEEDED",
-                "language": "en", 
-                "message": "To help with effective planning, please clarify:\n• Time period (day, week, month)\n• Main activities or goals\n• Constraints or priorities",
-                "missing_info": ["time_period", "goals", "constraints"],
-                "suggestions": ["Start with big goals then details", "Consider break times"]
-            }
-    
-    def create_general_fallback(self, user_message, language):
-        """Create general intelligent fallback"""
-        if language == 'ar':
-            return {
-                "mode": "CLARIFICATION_NEEDED",
-                "language": "ar", 
-                "message": "لم أفهم طلبك بالكامل. هل يمكنك إعادة صياغته أو تقديم مزيد من التفاصيل؟",
-                "missing_info": ["الهدف_الرئيسي", "التفاصيل_المطلوبة", "السياق"],
-                "suggestions": ["كن محدداً في طلبك", "اذكر السياق والأهداف"]
-            }
-        else:
-            return {
-                "mode": "CLARIFICATION_NEEDED",
-                "language": "en",
-                "message": "I didn't fully understand your request. Could you rephrase or provide more details?",
-                "missing_info": ["main_goal", "required_details", "context"],
-                "suggestions": ["Be specific in your request", "Mention context and goals"]
-            }
-    
-    def create_timeout_response(self, user_message):
-        """Create response for timeout situations"""
-        language = self.detect_language(user_message)
-        
-        if language == 'ar':
-            return {
-                "mode": "CLARIFICATION_NEEDED",
-                "language": "ar",
-                "message": "استغرقت المعالجة وقتاً طويلاً. دعنا نحاول بطريقة أبسط. ما هو الشيء الأكثر أهمية الذي تريد تحقيقه؟",
-                "missing_info": ["الهدف_الأساسي"],
-                "suggestions": ["حاول تقسيم الطلب إلى أجزاء أصغر", "ركز على العناصر الأكثر أهمية أولاً"]
-            }
-        else:
-            return {
-                "mode": "CLARIFICATION_NEEDED", 
-                "language": "en",
-                "message": "Processing took too long. Let's try a simpler approach. What's the most important thing you want to achieve?",
-                "missing_info": ["primary_goal"],
-                "suggestions": ["Try breaking the request into smaller parts", "Focus on most important elements first"]
-            }
-    
-    def extract_topic(self, text):
-        """Extract main topic from text for fallback responses"""
-        # Simple topic extraction - can be enhanced
-        words = text.split()
-        if len(words) > 2:
-            return ' '.join(words[:3]) + '...'
-        return text[:20] + '...' if len(text) > 20 else text
-    
-    def process_message(self, user_message, db):
-        """Main processing function with enhanced capabilities"""
-        ai_response = self.send_to_ai(user_message)
-        
-        results = {
-            'mode': ai_response.get('mode', 'DIRECT_ACTION'),
-            'message': ai_response.get('message', ''),
-            'language': ai_response.get('language', 'en'),
-            'created_tasks': [],
-            'created_notes': [],
-            'research_preview': ai_response.get('research_preview'),
-            'missing_info': ai_response.get('missing_info', []),
-            'suggestions': ai_response.get('suggestions', []),
-            'processing_time': ai_response.get('processing_time', 0)
         }
+
+    def _parse_ai_response(self, ai_text, language):
+        """Enhanced AI response parsing with better error handling"""
+        try:
+            # Clean the response
+            cleaned_text = re.sub(r'```json\s*|```\s*', '', ai_text)
+            cleaned_text = re.sub(r'\[INST\].*?\[/INST\]', '', cleaned_text, flags=re.DOTALL)
+            cleaned_text = cleaned_text.strip()
+            
+            # Find JSON object
+            json_match = re.search(r'\{.*\}', cleaned_text, re.DOTALL)
+            if json_match:
+                parsed = json.loads(json_match.group())
+                
+                # Ensure required fields
+                if 'response_message' not in parsed:
+                    parsed['response_message'] = self._generate_natural_response(parsed, language)
+                
+                if 'tasks' not in parsed:
+                    parsed['tasks'] = []
+                
+                if 'notes' not in parsed:
+                    parsed['notes'] = []
+                
+                return parsed
+        except Exception as e:
+            logging.error(f"JSON parse error: {e}")
         
-        # Create tasks and notes if in direct action mode
-        if results['mode'] == 'DIRECT_ACTION':
-            for task_data in ai_response.get('tasks', []):
-                task = db.create_task(
-                    title=task_data.get('title', 'Task' if results['language'] == 'en' else 'مهمة'),
+        # Fallback if parsing fails
+        return self._create_fallback_response(ai_text, language, None)
+
+    def _generate_natural_response(self, ai_response, language):
+        """Generate sophisticated natural language responses"""
+        task_count = len(ai_response.get('tasks', []))
+        note_count = len(ai_response.get('notes', []))
+        
+        if language == 'ar':
+            responses = [
+                f"تم الإنشاء بنجاح! {task_count} مهمة و {note_count} ملاحظة جاهزة.",
+                f"ممتاز! لقد أنشأت {task_count} مهام و {note_count} ملاحظات حسب طلبك.",
+                f"جاهز للتطبيق! {task_count} مهمة و {note_count} ملاحظة في انتظارك.",
+                f"تمت المعالجة: {task_count} مهام جديدة و {note_count} ملاحظات مضافة.",
+                f"إنجاز رائع! {task_count} مهمة و {note_count} ملاحظة تم إنشاؤها بنجاح."
+            ]
+        else:
+            responses = [
+                f"Perfect! I've created {task_count} tasks and {note_count} notes for you.",
+                f"Excellent! Your {task_count} tasks and {note_count} notes are ready.",
+                f"All set! {task_count} tasks and {note_count} notes have been added.",
+                f"Processing complete: {task_count} new tasks and {note_count} notes created.",
+                f"Great work! Successfully created {task_count} tasks and {note_count} notes."
+            ]
+        
+        return random.choice(responses)
+
+    def _create_database_entries(self, ai_response, database, language):
+        """Create tasks and notes in database from AI response"""
+        if not database:
+            return
+        
+        created_tasks = []
+        created_notes = []
+        
+        # Create tasks
+        for task_data in ai_response.get('tasks', []):
+            try:
+                task = database.create_task(
+                    title=task_data.get('title', 'Task' if language == 'en' else 'مهمة'),
                     description=task_data.get('description', ''),
                     due_date=task_data.get('due_date'),
                     due_time=task_data.get('due_time'),
-                    duration=task_data.get('duration', '1 hour' if results['language'] == 'en' else '1 ساعة'),
+                    duration=task_data.get('duration'),
                     priority=task_data.get('priority', 'medium'),
-                    category=task_data.get('category', 'work' if results['language'] == 'en' else 'عمل'),
-                    language=results['language']
+                    language=language,
+                    category=task_data.get('category', 'work'),
+                    start_date=task_data.get('start_date'),
+                    end_date=task_data.get('end_date')
                 )
-                results['created_tasks'].append(task)
-            
-            for note_data in ai_response.get('notes', []):
-                note = db.create_note(
-                    title=note_data.get('title', 'Note' if results['language'] == 'en' else 'ملاحظة'),
+                created_tasks.append(task)
+            except Exception as e:
+                logging.error(f"Error creating task: {e}")
+        
+        # Create notes
+        for note_data in ai_response.get('notes', []):
+            try:
+                note = database.create_note(
+                    title=note_data.get('title', 'Note' if language == 'en' else 'ملاحظة'),
                     content=note_data.get('content', ''),
                     category=note_data.get('category', 'General'),
-                    language=results['language']
+                    language=language,
+                    word_count=note_data.get('word_count'),
+                    paragraph_count=note_data.get('paragraph_count'),
+                    character_count=note_data.get('character_count')
                 )
-                results['created_notes'].append(note)
+                created_notes.append(note)
+            except Exception as e:
+                logging.error(f"Error creating note: {e}")
         
-        print(f"🎯 Processing complete: {results['mode']}, Tasks: {len(results['created_tasks'])}, Notes: {len(results['created_notes'])}")
-        return results
+        ai_response['created_tasks'] = created_tasks
+        ai_response['created_notes'] = created_notes
+
+    def _update_context(self, new_context):
+        """Update conversation context"""
+        self.conversation_context.update(new_context)
+        # Keep context manageable
+        if len(self.conversation_context) > 10:
+            # Remove oldest entries
+            keys_to_remove = list(self.conversation_context.keys())[:5]
+            for key in keys_to_remove:
+                del self.conversation_context[key]
+
+    def _update_context_from_response(self, ai_response, user_message):
+        """Update context based on AI response"""
+        context_updates = ai_response.get('context_updates', {})
+        if context_updates:
+            self._update_context(context_updates)
+
+    def _create_fallback_response(self, user_message, language, database):
+        """Enhanced fallback response"""
+        response = self.enhanced_rag.get_fallback_response(user_message, language)
+        response['ai_metadata'] = {
+            'response_type': 'fallback',
+            'reason': 'primary_ai_unavailable'
+        }
+        
+        if database:
+            self._create_database_entries(response, database, language)
+        
+        return response
+
+    def _create_image_fallback_response(self):
+        """Fallback for image processing failures"""
+        return {
+            "response_message": "I encountered an issue processing the image. Please try describing what you see in the image, and I'll help you create tasks or notes based on that.",
+            "tasks": [],
+            "notes": [],
+            "suggestions": ["Try uploading a clearer image", "Describe the image content in text"],
+            "ai_metadata": {
+                'response_type': 'image_fallback',
+                'status': 'processing_error'
+            }
+        }
+
+    def _create_error_response(self, error_message, language):
+        """Create error response"""
+        if language == 'ar':
+            message = "عذراً، حدث خطأ في المعالجة. يرجى المحاولة مرة أخرى."
+        else:
+            message = "Sorry, an error occurred during processing. Please try again."
+        
+        return {
+            "response_message": message,
+            "tasks": [],
+            "notes": [],
+            "suggestions": ["Check your connection and try again", "Simplify your request"],
+            "ai_metadata": {
+                'error': error_message,
+                'response_type': 'error'
+            }
+        }
+
+    def check_model_health(self):
+        """Check if AI model is healthy"""
+        try:
+            start_time = time.time()
+            test_prompt = "Respond with only: {'status': 'healthy'}"
+            
+            payload = {
+                "model": self.model_name,
+                "prompt": test_prompt,
+                "stream": False,
+                "options": {"temperature": 0.1, "num_predict": 10}
+            }
+            
+            response = requests.post(self.ollama_url, json=payload, timeout=10)
+            response_time = time.time() - start_time
+            
+            return {
+                'status': 'healthy' if response.status_code == 200 else 'unhealthy',
+                'response_time': round(response_time, 2),
+                'model': self.model_name
+            }
+        except Exception as e:
+            return {
+                'status': 'unhealthy',
+                'error': str(e),
+                'response_time': 0,
+                'model': self.model_name
+            }
+
+    def analyze_image(self, image_file, analysis_type, database):
+        """Enhanced image analysis"""
+        # This would be implemented with proper image processing
+        return self._process_image_message(image_file, database)
+
+    def process_voice_input(self, audio_file, language, database):
+        """Enhanced voice input processing"""
+        # Placeholder for STT implementation
+        return self._process_voice_message(audio_file, database)
+
+    def generate_suggestions(self, context, suggestion_type):
+        """Generate AI-powered suggestions"""
+        language = context.get('language', 'en')
+        
+        suggestions = {
+            'en': [
+                "Would you like me to create a detailed schedule for this?",
+                "I can break this down into smaller tasks if you'd like",
+                "Should I research this topic in more depth?",
+                "Would you like me to set reminders for these tasks?",
+                "I can help you prioritize these items by importance"
+            ],
+            'ar': [
+                "هل تريد أن أنشئ جدولاً مفصلاً لهذا؟",
+                "يمكنني تقسيم هذا إلى مهام أصغر إذا أردت",
+                "هل يجب أن أبحث في هذا الموضوع بعمق أكبر؟",
+                "هل تريد أن أحدد مواعيد تذكير لهذه المهام؟",
+                "يمكنني مساعدتك في تحديد أولويات هذه العناصر حسب الأهمية"
+            ]
+        }
+        
+        return random.sample(suggestions.get(language, suggestions['en']), 3)
+
+    def analyze_productivity_patterns(self, database):
+        """Analyze productivity patterns using AI"""
+        tasks = database.get_tasks()
+        notes = database.get_notes()
+        
+        # Simple pattern analysis - could be enhanced with ML
+        high_priority_count = len([t for t in tasks if t.get('priority') == 'high'])
+        completed_count = len([t for t in tasks if t.get('completed', False)])
+        total_tasks = len(tasks)
+        
+        completion_rate = (completed_count / total_tasks * 100) if total_tasks > 0 else 0
+        
+        return {
+            'completion_rate': round(completion_rate, 1),
+            'high_priority_ratio': round((high_priority_count / total_tasks * 100), 1) if total_tasks > 0 else 0,
+            'total_notes': len(notes),
+            'productivity_score': min(100, completion_rate + (high_priority_count * 10)),
+            'recommendations': [
+                "Try breaking large tasks into smaller subtasks",
+                "Schedule important tasks during your most productive hours",
+                "Use the notes feature to capture ideas and research"
+            ]
+        }
