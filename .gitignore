@@ -1,0 +1,6 @@
+.env
+backend/rag_index_cache.pkl
+backend/_pycache_
+backend/data.json
+backend/__pycache__/rag_examples.cpython-312.pyc
+
