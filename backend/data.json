@@ -1,9 +1,19 @@
 {
   "tasks": [],
-  "notes": [],
+  "notes": [
+    {
+      "id": 3,
+      "title": "Summary: Natural Language Processing (Nlp) Is...",
+      "content": "Despite these challenges,\nNLP has become one of the most impactful areas of AI, powering applications such as search\nengines, chatbots, recommendation systems, sentiment analysis, and machine translation. Probabilistic models such as Hidden Markov Models and n-gram language models enabled\nsystems to learn patterns directly from data rather than relying solely on handcrafted rules. Text summarization emerged as an important NLP task as the volume of digital text increased\nexponentially.",
+      "category": "Documents",
+      "language": "en",
+      "word_count": 70,
+      "created_at": "2025-12-19T22:37:39.247809"
+    }
+  ],
   "analytics": {
-    "total_tasks_created": 0,
-    "total_notes_created": 1
+    "total_tasks_created": 1,
+    "total_notes_created": 2
   },
-  "last_id": 1
+  "last_id": 3
 }

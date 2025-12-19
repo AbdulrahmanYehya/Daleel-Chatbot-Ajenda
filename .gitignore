@@ -26,3 +26,8 @@ backend/__pycache__/ai_handler.cpython-312.pyc
 backend/__pycache__/rag_handler.cpython-312.pyc
 backend/__pycache__/ai_handler.cpython-312.pyc
 backend/__pycache__/database.cpython-312.pyc
+backend/ai_chatbot.log
+backend/__pycache__/ai_handler.cpython-312.pyc
+backend/__pycache__/database.cpython-312.pyc
+backend/__pycache__/rag_handler.cpython-312.pyc
+backend/data.json

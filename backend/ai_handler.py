@@ -95,13 +95,13 @@ class EnhancedAIHandler:
         if check_fuzzy(['delete', 'remove', 'cancel', 'احذف', 'إلغاء', 'امسح', 'شطب']):
             return 'delete_item'
         
-        if check_fuzzy(['update', 'change', 'modify', 'edit', 'تعديل', 'غير', 'تغيير', 'عدل']):
+        # Expanded Update Keywords
+        if check_fuzzy(['update', 'change', 'modify', 'edit', 'set', 'move', 'reschedule', 'تحديث', 'تعديل', 'غير', 'اجعل', 'نقل']):
             return 'update_item'
 
         if check_fuzzy(['note', 'ملاحظة']):
              return 'generate_note'
 
-        # Heuristic for planning/tasks
         has_time = re.search(r'\d{1,2}(?::\d{2})?', text) or 'tomorrow' in text or 'غدا' in text
         if has_time and len(words) > 2:
              return 'create_task'
@@ -191,8 +191,75 @@ class EnhancedAIHandler:
         return self._ask_clarification(user_message, language, "delete_not_found")
 
     def _handle_update_request(self, user_message, database, language):
-        # Basic update logic - can be expanded
-        return {"response_message": "Update logic processed", "tasks": [], "notes": []}
+        """
+        Robust logic to update existing tasks.
+        """
+        updates = {}
+        msg_lower = user_message.lower()
+        
+        # 1. Clean the message to remove command words (so we can find the task title)
+        # Removes: update, change, set, move, to, for, etc.
+        command_words = [
+            'update', 'change', 'modify', 'edit', 'set', 'move', 'reschedule', 
+            'تحديث', 'تعديل', 'غير', 'اجعل', 'نقل', 'to', 'for', 'the', 'my'
+        ]
+        clean_msg_for_search = msg_lower
+        for cmd in command_words:
+            clean_msg_for_search = clean_msg_for_search.replace(cmd, "")
+        
+        # 2. Extract the NEW values (Time, Date, Priority)
+        # Check Time
+        new_time, _ = self._extract_time_and_clean(msg_lower, language)
+        if new_time: updates['due_time'] = new_time
+        
+        # Check Date
+        new_date, _ = self._extract_date_and_clean(msg_lower)
+        if new_date: updates['due_date'] = new_date
+        
+        # Check Priority
+        if any(w in msg_lower for w in ['high', 'urgent', 'important', 'عالي', 'هام']):
+            updates['priority'] = 'high'
+        elif any(w in msg_lower for w in ['medium', 'normal', 'متوسط']):
+            updates['priority'] = 'medium'
+        elif any(w in msg_lower for w in ['low', 'منخفض']):
+            updates['priority'] = 'low'
+
+        if not updates:
+             return self._ask_clarification(user_message, language, "update_no_changes")
+
+        # 3. Find the Target Task
+        tasks = database.get_tasks()
+        target_task = None
+        
+        search_key = clean_msg_for_search.strip()
+        
+        # Strategy A: Search by name if user provided one
+        if len(search_key) > 2:
+            for t in tasks:
+                if search_key in t['title'].lower():
+                    target_task = t
+                    break
+        
+        # Strategy B: Fallback to MOST RECENT task if no name matches
+        # This handles: "Create gym task" -> "Change time to 5pm"
+        if not target_task and tasks:
+            target_task = tasks[-1] 
+
+        # 4. Perform Update
+        if target_task:
+            updated_task = database.update_task(target_task['id'], updates)
+            
+            # Formulate response
+            if language == 'ar':
+                msg = f"تم تحديث مهمة '{updated_task['title']}' بنجاح."
+            else:
+                msg = f"Updated task '{updated_task['title']}' successfully."
+                
+            return {"response_message": msg, "tasks": [updated_task], "notes": []}
+
+        return self._ask_clarification(user_message, language, "update_not_found")
+
+    # --- ADVANCED PARSING & EXTRACTION ---
 
     def _extract_date_and_clean(self, text):
         text_lower = text.lower()
@@ -221,11 +288,13 @@ class EnhancedAIHandler:
         return target_date, text
 
     def _extract_time_and_clean(self, text, language):
+        # Improved regex to catch "5pm", "5:00 pm", "17:00", "5 pm"
         pattern = r'(?:at |around |by |الساعة |في تمام )?(\d{1,2}(?::\d{2})?\s*(?:am|pm| ص| م)?)'
         match = re.search(pattern, text, re.IGNORECASE)
         found_time = None
         if match:
             raw_time = match.group(1)
+            # Basic validation
             if any(x in raw_time.lower() for x in ['am', 'pm', ':', 'ص', 'م']) or (raw_time.isdigit() and int(raw_time) <= 12):
                 found_time = self._normalize_time(raw_time, language)
                 if found_time:
