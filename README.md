@@ -1,4 +1,6 @@
-🚀 Intelligent Productivity AI - Daleel Agenda
+https://docs.google.com/document/d/1WbwoOhzFtD879Kbb57600DjvEOUbSeX76u5ESuTYlZM/edit?usp=sharing
+
+🚀 Intelligent Productivity AI Agent - Daleel AiGenda
 
 A sophisticated bilingual (English/Arabic) AI-powered productivity assistant that helps you manage tasks, create notes, and plan your schedule through natural language conversations.
 
