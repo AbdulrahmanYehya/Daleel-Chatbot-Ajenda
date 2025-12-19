@@ -1,136 +1,111 @@
 <!DOCTYPE html>
-<html lang="ar">
+<html lang="en" dir="ltr">
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>🚀 Intelligent Productivity AI | مساعد الإنتاجية الذكي</title>
+    <title>Daleel Agenda</title>
     <link rel="stylesheet" href="{{ url_for('static', filename='style.css') }}">
 </head>
 <body>
-    <div class="container">
-        <header class="competition-header">
-            <div class="header-content">
-                <div class="header-main">
-                    <h1>🚀 Intelligent Productivity AI</h1>
-                    <p class="subtitle">مساعد الإنتاجية الذكي</p>
+
+    <div class="app-container">
+        <header>
+            <div class="header-top">
+                <div class="logo-area">
+                    <h1>DALEEL AGENDA</h1>
+                    <div class="status-indicator" id="statusIndicator"></div>
+                    <span id="modelStatus" class="status-text">Connecting...</span>
                 </div>
-                <div class="header-controls">
-                    <div class="model-status">
-                        <span id="modelStatus">Checking AI model...</span>
-                        <div class="status-indicator" id="statusIndicator"></div>
-                    </div>
-                    <div class="language-toggle">
-                        <button id="arabicBtn" class="lang-btn" onclick="setLanguage('ar')">العربية</button>
-                        <button id="englishBtn" class="lang-btn active" onclick="setLanguage('en')">English</button>
-                    </div>
+                <div class="language-controls">
+                    <button id="englishBtn" class="lang-btn active" onclick="setLanguage('en')">EN</button>
+                    <button id="arabicBtn" class="lang-btn" onclick="setLanguage('ar')">عربي</button>
                 </div>
+            </div>
+
+            <div class="analytics-bar">
+                <div class="stat-item">
+                    <span class="stat-label">Tasks</span>
+                    <span class="stat-value" id="totalTasks">0</span>
+                </div>
+                <div class="stat-item">
+                    <span class="stat-label">Notes</span>
+                    <span class="stat-value" id="totalNotes">0</span>
+                </div>
+                <div class="stat-item">
+                    <span class="stat-label">Completed</span>
+                    <span class="stat-value" id="completedTasks">0</span>
+                </div>
+                <button id="clearButton" onclick="clearAll()" class="clear-btn">Clear Data</button>
             </div>
         </header>
 
-        <div class="main-content">
-            <div class="chat-section">
-                <div class="chat-container" id="chatContainer">
-                    <div class="welcome-message" id="welcomeMessage">
-                        </div>
+        <main class="main-grid">
+            
+            <section class="interaction-panel">
+                <div id="chatContainer" class="chat-container">
+                    <div class="message bot-message">
+                        <span id="welcomeMessage">Welcome back! How can I help you organize today?</span>
                     </div>
-
-                <div class="thinking-indicator" id="thinkingIndicator" style="display: none;">
-                    <div class="thinking-dots">
-                        <div class="dot"></div>
-                        <div class="dot"></div>
-                        <div class="dot"></div>
-                    </div>
-                    <span class="thinking-text" id="thinkingText">Thinking...</span>
                 </div>
 
-                <div class="examples-section">
-                    <div class="examples-header">
-                        <h3 id="examplesTitle">Try These Examples</h3>
-                        <button class="refresh-examples" onclick="refreshExamples()" title="Refresh Examples">🔄</button>
-                    </div>
-                    <div class="examples-grid" id="examplesGrid">
+                <div id="thinkingIndicator" class="thinking-indicator" style="display: none;">
+                    <div class="spinner"></div>
+                    <span id="thinkingText">Processing...</span>
+                </div>
+
+                <div class="suggestions-section">
+                    <h4 id="examplesTitle">Try These Examples</h4>
+                    <div id="examplesGrid" class="examples-grid">
                         </div>
                 </div>
 
-                <div class="input-section">
-                    <div class="input-container">
-                        <input type="text" id="messageInput"
-                               placeholder="Tell me what you need help with..."
-                               onkeypress="handleKeyPress(event)">
-                        <div class="voice-controls">
-                            <button id="voiceButton" class="btn-voice" onclick="toggleVoiceRecognition()" title="Voice Input">
-                                <span id="voiceIcon">🎤</span>
-                            </button>
-                            <button id="speakButton" class="btn-speak" onclick="speakLastMessage()" style="display: none;" title="Speak Last Message">
-                                <span>🔊</span>
-                            </button>
-                        </div>
-                        <button onclick="sendMessage()" id="sendButton" class="btn-send">
-                            <span id="sendText">Send</span>
-                            <div class="send-loader" id="sendLoader" style="display: none;"></div>
-                        </button>
-                    </div>
-                    <div class="voice-status" id="voiceStatus" style="display: none;">
-                        <div class="voice-indicator">
-                            <div class="voice-dot"></div>
-                            <div class="voice-dot"></div>
-                            <div class="voice-dot"></div>
-                        </div>
+                <div class="input-wrapper">
+                    <div id="voiceStatus" class="voice-status" style="display: none;">
                         <span id="voiceStatusText">Listening...</span>
                     </div>
-                </div>
-            </div>
 
-            <div class="content-panels">
-                <div class="panel tasks-panel">
-                    <div class="panel-header">
-                        <h2 id="tasksTitle">🎯 Your Tasks</h2>
-                        <div class="panel-stats">
-                            <span class="stat" id="tasksCount">0</span>
-                            <span class="stat-label">Tasks</span>
+                    <div class="input-actions-bar">
+                        <label for="fileInput" class="icon-btn" title="Upload Document">
+                            📂
+                            <input type="file" id="fileInput" hidden>
+                        </label>
+                        <button id="voiceButton" class="icon-btn" onclick="toggleVoiceRecognition()">
+                            🎙️
+                        </button>
+                    </div>
+
+                    <div class="text-input-container">
+                        <input type="text" id="messageInput" placeholder="Type a task, note, or query..." autocomplete="off" onkeypress="handleKeyPress(event)">
+                        <button id="sendButton" onclick="sendMessage()">
+                            <span id="sendText">Send</span>
+                            <span id="sendLoader" class="loader" style="display: none;"></span>
+                        </button>
+                    </div>
+                </div>
+            </section>
+
+            <section class="data-panel">
+                
+                <div class="panel-section">
+                    <div class="section-header">
+                        <h2 id="tasksTitle">Tasks</h2>
+                        <span class="count-badge" id="tasksCount">0</span>
+                    </div>
+                    <div id="tasksContainer" class="items-container">
                         </div>
-                    </div>
-                    <div class="panel-content">
-                        <div class="tasks-container" id="tasksContainer">
-                            </div>
-                    </div>
                 </div>
 
-                <div class="panel notes-panel">
-                    <div class="panel-header">
-                        <h2 id="notesTitle">📚 Knowledge Base</h2>
-                        <div class="panel-stats">
-                            <span class="stat" id="notesCount">0</span>
-                            <span class="stat-label">Notes</span>
+                <div class="panel-section">
+                    <div class="section-header">
+                        <h2 id="notesTitle">Notes</h2>
+                        <span class="count-badge" id="notesCount">0</span>
+                    </div>
+                    <div id="notesContainer" class="items-container">
                         </div>
-                    </div>
-                    <div class="panel-content">
-                        <div class="notes-container" id="notesContainer">
-                            </div>
-                    </div>
                 </div>
-            </div>
-        </div>
 
-        <footer class="competition-footer">
-            <div class="footer-content">
-                <div class="analytics">
-                    <div class="analytics-item">
-                        <span class="analytics-value" id="totalTasks">0</span>
-                        <span class="analytics-label">Total Tasks</span>
-                    </div>
-                    <div class="analytics-item">
-                        <span class="analytics-value" id="totalNotes">0</span>
-                        <span class="analytics-label">Total Notes</span>
-                    </div>
-                    <div class="analytics-item">
-                        <span class="analytics-value" id="completedTasks">0</span>
-                        <span class="analytics-label">Completed Tasks</span>
-                    </div>
-                    </div>
-                <button onclick="clearAll()" class="btn-clear" id="clearButton">Clear All Data</button>
-            </div>
-        </footer>
+            </section>
+        </main>
     </div>
 
     <script src="{{ url_for('static', filename='script.js') }}"></script>

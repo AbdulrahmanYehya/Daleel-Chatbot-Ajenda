@@ -1,12 +1,9 @@
 {
   "tasks": [],
   "notes": [],
-  "last_id": 0,
   "analytics": {
     "total_tasks_created": 0,
-    "total_notes_created": 0,
-    "last_activity": "2025-10-28T18:12:30.525850",
-    "ai_interactions": 0
+    "total_notes_created": 1
   },
-  "ai_context": {}
+  "last_id": 1
 }
