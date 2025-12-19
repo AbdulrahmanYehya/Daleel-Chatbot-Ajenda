@@ -409,7 +409,7 @@ class EnhancedAIHandler:
         return {'status': 'healthy', 'model': self.model_name}
 
     def _call_ollama(self, prompt, is_json_output_expected=True):
-        # Legacy stub for OLLAMA calls if needed late
+        # Legacy stub for OLLAMA calls if needed later
         return None
 
     def _ask_clarification(self, msg, lang, type=None):
