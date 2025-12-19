@@ -1,98 +1,12 @@
 {
-  "tasks": [
-    {
-      "id": 30,
-      "title": "تمارين 7 صباحاً",
-      "description": "تمارين 7 صباحاً",
-      "due_date": "2025-10-18",
-      "due_time": "",
-      "duration": "1 hour",
-      "priority": "medium",
-      "category": "personal",
-      "language": "ar",
-      "start_date": "2025-10-18",
-      "end_date": "2025-10-18",
-      "created_at": "2025-10-18T00:37:33.698835",
-      "updated_at": "2025-10-18T00:37:33.698835",
-      "completed": false,
-      "completed_at": null,
-      "ai_generated": true
-    },
-    {
-      "id": 31,
-      "title": "تأمل",
-      "description": "تأمل 7:30",
-      "due_date": "2025-10-18",
-      "due_time": "07:30",
-      "duration": "1 hour",
-      "priority": "medium",
-      "category": "health",
-      "language": "ar",
-      "start_date": "2025-10-18",
-      "end_date": "2025-10-18",
-      "created_at": "2025-10-18T00:37:33.701824",
-      "updated_at": "2025-10-18T00:37:33.701824",
-      "completed": false,
-      "completed_at": null,
-      "ai_generated": true
-    },
-    {
-      "id": 32,
-      "title": "عمل 8 صباحاً",
-      "description": "عمل 8 صباحاً",
-      "due_date": "2025-10-18",
-      "due_time": "",
-      "duration": "1 hour",
-      "priority": "medium",
-      "category": "work",
-      "language": "ar",
-      "start_date": "2025-10-18",
-      "end_date": "2025-10-18",
-      "created_at": "2025-10-18T00:37:33.703822",
-      "updated_at": "2025-10-18T00:37:33.703822",
-      "completed": false,
-      "completed_at": null,
-      "ai_generated": true
-    },
-    {
-      "id": 34,
-      "title": "الواجب",
-      "description": "إنهاء الواجب المطلوب",
-      "due_date": "2025-10-18",
-      "due_time": "20:00",
-      "duration": "ساعتان",
-      "priority": "high",
-      "category": "study",
-      "language": "ar",
-      "start_date": "2025-10-18",
-      "end_date": "2025-10-18",
-      "created_at": "2025-10-18T00:37:53.764162",
-      "updated_at": "2025-10-18T00:37:53.764162",
-      "completed": false,
-      "completed_at": null,
-      "ai_generated": true
-    }
-  ],
-  "notes": [
-    {
-      "id": 33,
-      "title": "أفكار المشروع",
-      "content": "1. تطبيق لإدارة المهام الذكية\n2. منصة للتعلم الإلكتروني\n3. نظام للزراعة الذكية\n4. تطبيق للصحة واللياقة\n5. منصة للعمل الحر",
-      "category": "Ideas",
-      "language": "ar",
-      "word_count": 30,
-      "paragraph_count": 1,
-      "character_count": 121,
-      "created_at": "2025-10-18T00:37:39.386349",
-      "updated_at": "2025-10-18T00:37:39.386349",
-      "ai_generated": true
-    }
-  ],
-  "last_id": 34,
+  "tasks": [],
+  "notes": [],
+  "last_id": 0,
   "analytics": {
-    "total_tasks_created": 25,
-    "total_notes_created": 5,
-    "last_activity": "2025-10-18T00:37:53.764162",
-    "ai_interactions": 30
-  }
+    "total_tasks_created": 0,
+    "total_notes_created": 0,
+    "last_activity": "2025-10-28T18:12:30.525850",
+    "ai_interactions": 0
+  },
+  "ai_context": {}
 }

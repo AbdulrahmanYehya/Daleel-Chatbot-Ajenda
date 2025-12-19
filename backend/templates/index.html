@@ -8,7 +8,6 @@
 </head>
 <body>
     <div class="container">
-        <!-- Header -->
         <header class="competition-header">
             <div class="header-content">
                 <div class="header-main">
@@ -28,17 +27,13 @@
             </div>
         </header>
 
-        <!-- Main Content -->
         <div class="main-content">
-            <!-- Chat Section -->
             <div class="chat-section">
                 <div class="chat-container" id="chatContainer">
                     <div class="welcome-message" id="welcomeMessage">
-                        <!-- Welcome message will be loaded here -->
+                        </div>
                     </div>
-                </div>
 
-                <!-- Thinking Indicator -->
                 <div class="thinking-indicator" id="thinkingIndicator" style="display: none;">
                     <div class="thinking-dots">
                         <div class="dot"></div>
@@ -48,45 +43,30 @@
                     <span class="thinking-text" id="thinkingText">Thinking...</span>
                 </div>
 
-                <!-- Confirmation Banner -->
-                <div class="confirmation-banner" id="confirmationBanner" style="display: none;">
-                    <div class="confirmation-content">
-                        <h3 id="confirmationTitle">Save Research as Note?</h3>
-                        <div class="research-preview" id="researchPreview"></div>
-                        <div class="confirmation-buttons">
-                            <button onclick="confirmResearch(true)" id="confirmYes" class="btn-confirm">Yes, Save</button>
-                            <button onclick="confirmResearch(false)" id="confirmNo" class="btn-cancel">No, Thanks</button>
-                        </div>
-                    </div>
-                </div>
-
-                <!-- Examples Section -->
                 <div class="examples-section">
                     <div class="examples-header">
                         <h3 id="examplesTitle">Try These Examples</h3>
-                        <button class="refresh-examples" onclick="refreshExamples()">🔄</button>
+                        <button class="refresh-examples" onclick="refreshExamples()" title="Refresh Examples">🔄</button>
                     </div>
                     <div class="examples-grid" id="examplesGrid">
-                        <!-- Examples will be loaded here -->
-                    </div>
+                        </div>
                 </div>
 
-                <!-- Input Section -->
                 <div class="input-section">
                     <div class="input-container">
-                        <input type="text" id="messageInput" 
-                               placeholder="Describe what you want to accomplish..." 
+                        <input type="text" id="messageInput"
+                               placeholder="Tell me what you need help with..."
                                onkeypress="handleKeyPress(event)">
                         <div class="voice-controls">
-                            <button id="voiceButton" class="btn-voice" onclick="toggleVoiceRecognition()">
+                            <button id="voiceButton" class="btn-voice" onclick="toggleVoiceRecognition()" title="Voice Input">
                                 <span id="voiceIcon">🎤</span>
                             </button>
-                            <button id="speakButton" class="btn-speak" onclick="speakLastMessage()" style="display: none;">
+                            <button id="speakButton" class="btn-speak" onclick="speakLastMessage()" style="display: none;" title="Speak Last Message">
                                 <span>🔊</span>
                             </button>
                         </div>
                         <button onclick="sendMessage()" id="sendButton" class="btn-send">
-                            <span id="sendText">Send to AI</span>
+                            <span id="sendText">Send</span>
                             <div class="send-loader" id="sendLoader" style="display: none;"></div>
                         </button>
                     </div>
@@ -101,9 +81,7 @@
                 </div>
             </div>
 
-            <!-- Content Panels -->
             <div class="content-panels">
-                <!-- Tasks Panel -->
                 <div class="panel tasks-panel">
                     <div class="panel-header">
                         <h2 id="tasksTitle">🎯 Your Tasks</h2>
@@ -114,12 +92,10 @@
                     </div>
                     <div class="panel-content">
                         <div class="tasks-container" id="tasksContainer">
-                            <!-- Tasks will be loaded here -->
-                        </div>
+                            </div>
                     </div>
                 </div>
 
-                <!-- Notes Panel -->
                 <div class="panel notes-panel">
                     <div class="panel-header">
                         <h2 id="notesTitle">📚 Knowledge Base</h2>
@@ -130,14 +106,12 @@
                     </div>
                     <div class="panel-content">
                         <div class="notes-container" id="notesContainer">
-                            <!-- Notes will be loaded here -->
-                        </div>
+                            </div>
                     </div>
                 </div>
             </div>
         </div>
 
-        <!-- Footer -->
         <footer class="competition-footer">
             <div class="footer-content">
                 <div class="analytics">
@@ -151,9 +125,9 @@
                     </div>
                     <div class="analytics-item">
                         <span class="analytics-value" id="completedTasks">0</span>
-                        <span class="analytics-label">Completed</span>
+                        <span class="analytics-label">Completed Tasks</span>
                     </div>
-                </div>
+                    </div>
                 <button onclick="clearAll()" class="btn-clear" id="clearButton">Clear All Data</button>
             </div>
         </footer>
