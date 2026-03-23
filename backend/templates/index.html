@@ -3,111 +3,185 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Daleel Agenda</title>
+    <title>AiGenda</title>
     <link rel="stylesheet" href="{{ url_for('static', filename='style.css') }}">
 </head>
 <body>
 
-    <div class="app-container">
-        <header>
-            <div class="header-top">
-                <div class="logo-area">
-                    <h1>DALEEL AGENDA</h1>
-                    <div class="status-indicator" id="statusIndicator"></div>
-                    <span id="modelStatus" class="status-text">Connecting...</span>
-                </div>
+<div class="app-container">
+    <header>
+        <div class="header-top">
+            <div class="logo-area">
+                <h1>AiGenda</h1>
+                <div class="status-indicator" id="statusIndicator"></div>
+                <span id="modelStatus" class="status-text">Connecting...</span>
+            </div>
+            <div class="header-right">
+                <button class="briefing-btn" onclick="toggleBriefing()" title="Daily Briefing">📋 Briefing</button>
+                <button class="analytics-btn" onclick="toggleAnalytics()" title="Productivity Analytics">📊 Analytics</button>
+                <button class="memory-btn" onclick="toggleMemoryPanel()" title="Agent Memory">🧠 Memory</button>
                 <div class="language-controls">
                     <button id="englishBtn" class="lang-btn active" onclick="setLanguage('en')">EN</button>
                     <button id="arabicBtn" class="lang-btn" onclick="setLanguage('ar')">عربي</button>
                 </div>
             </div>
+        </div>
 
-            <div class="analytics-bar">
-                <div class="stat-item">
-                    <span class="stat-label">Tasks</span>
-                    <span class="stat-value" id="totalTasks">0</span>
-                </div>
-                <div class="stat-item">
-                    <span class="stat-label">Notes</span>
-                    <span class="stat-value" id="totalNotes">0</span>
-                </div>
-                <div class="stat-item">
-                    <span class="stat-label">Completed</span>
-                    <span class="stat-value" id="completedTasks">0</span>
-                </div>
-                <button id="clearButton" onclick="clearAll()" class="clear-btn">Clear Data</button>
+        <div class="analytics-bar">
+            <div class="stat-item">
+                <span class="stat-label" id="labelWorkspaces">Workspaces</span>
+                <span class="stat-value" id="totalWorkspaces">0</span>
             </div>
-        </header>
+            <div class="stat-item">
+                <span class="stat-label" id="labelTasks">Tasks</span>
+                <span class="stat-value" id="totalTasks">0</span>
+            </div>
+            <div class="stat-item">
+                <span class="stat-label" id="labelNotes">Notes</span>
+                <span class="stat-value" id="totalNotes">0</span>
+            </div>
+            <div class="stat-item">
+                <span class="stat-label" id="labelCompleted">Completed</span>
+                <span class="stat-value" id="completedTasks">0</span>
+            </div>
+            <div class="stat-item">
+                <span class="stat-label" id="labelOverdue">Overdue</span>
+                <span class="stat-value overdue-stat" id="overdueTasks">0</span>
+            </div>
+            <div class="stat-item" style="margin-left:auto;">
+                <button class="export-today-btn" onclick="exportTodayPDF()" title="Export today's plan as PDF">📥 Export Today</button>
+            </div>
+        </div>
+    </header>
 
-        <main class="main-grid">
-            
-            <section class="interaction-panel">
-                <div id="chatContainer" class="chat-container">
-                    <div class="message bot-message">
-                        <span id="welcomeMessage">Welcome back! How can I help you organize today?</span>
+    <main class="main-content">
+        <section class="chat-panel">
+            <div class="chat-header">
+                <h2 id="aiAssistantTitle">AI Assistant</h2>
+                <div class="header-actions">
+                    <button class="icon-btn clear-btn" onclick="clearAll()" title="Clear All Data">
+                        🗑️ <span id="clearBtnText">Clear</span>
+                    </button>
+                </div>
+            </div>
+
+            <div class="chat-history" id="chatHistory">
+                <div class="message bot-message" id="welcomeMessageEl">
+                    <div class="message-content" id="welcomeMessage">
+                        Hello! Loading your profile...
+                    </div>
+                    <span class="msg-time" id="welcomeTime"></span>
+                </div>
+                <div class="message bot-message" id="typingIndicator" style="display:none;">
+                    <div class="message-content typing-indicator">
+                        <span class="dot"></span><span class="dot"></span><span class="dot"></span>
+                        <span id="typingLabel" style="margin-left:8px;font-size:0.85rem;color:var(--text-muted);">Agent is thinking...</span>
                     </div>
                 </div>
+            </div>
 
-                <div id="thinkingIndicator" class="thinking-indicator" style="display: none;">
-                    <div class="spinner"></div>
-                    <span id="thinkingText">Processing...</span>
+            <div class="input-area">
+                <div class="examples-container">
+                    <span id="examplesTitle">Try:</span>
+                    <div class="example-chip" id="exampleChip" onclick="useExample()">...</div>
                 </div>
-
-                <div class="suggestions-section">
-                    <h4 id="examplesTitle">Try These Examples</h4>
-                    <div id="examplesGrid" class="examples-grid">
-                        </div>
+                <div class="upload-container">
+                    <label for="fileInput" class="upload-btn" title="Upload Document">📎</label>
+                    <input type="file" id="fileInput" accept=".txt,.pdf,.docx" style="display:none;">
+                    <button class="voice-btn" id="voiceBtn" onclick="toggleVoice()" title="Voice Input">🎤</button>
                 </div>
-
-                <div class="input-wrapper">
-                    <div id="voiceStatus" class="voice-status" style="display: none;">
-                        <span id="voiceStatusText">Listening...</span>
-                    </div>
-
-                    <div class="input-actions-bar">
-                        <label for="fileInput" class="icon-btn" title="Upload Document">
-                            📂
-                            <input type="file" id="fileInput" hidden>
-                        </label>
-                        <button id="voiceButton" class="icon-btn" onclick="toggleVoiceRecognition()">
-                            🎙️
-                        </button>
-                    </div>
-
-                    <div class="text-input-container">
-                        <input type="text" id="messageInput" placeholder="Type a task, note, or query..." autocomplete="off" onkeypress="handleKeyPress(event)">
-                        <button id="sendButton" onclick="sendMessage()">
-                            <span id="sendText">Send</span>
-                            <span id="sendLoader" class="loader" style="display: none;"></span>
-                        </button>
-                    </div>
+                <div class="input-container">
+                    <textarea id="messageInput"
+                        placeholder="Type a task, note, or query... (Shift+Enter for new line)"
+                        autocomplete="off" rows="1"
+                        onkeydown="handleKeyDown(event)"
+                        oninput="autoResize(this)"></textarea>
+                    <button id="sendButton" onclick="sendMessage()">
+                        <span id="sendText">Send</span>
+                        <span id="sendLoader" class="loader" style="display:none;"></span>
+                    </button>
                 </div>
-            </section>
+            </div>
+        </section>
 
-            <section class="data-panel">
-                
-                <div class="panel-section">
-                    <div class="section-header">
-                        <h2 id="tasksTitle">Tasks</h2>
-                        <span class="count-badge" id="tasksCount">0</span>
-                    </div>
-                    <div id="tasksContainer" class="items-container">
-                        </div>
+        <section class="data-panel">
+
+            <div class="panel-section">
+                <div class="section-header">
+                    <h2 id="workspacesTitle">Workspaces</h2>
+                    <span class="count-badge" id="workspacesCount">0</span>
                 </div>
+                <div id="workspacesContainer" class="items-container"></div>
+            </div>
 
-                <div class="panel-section">
-                    <div class="section-header">
-                        <h2 id="notesTitle">Notes</h2>
-                        <span class="count-badge" id="notesCount">0</span>
-                    </div>
-                    <div id="notesContainer" class="items-container">
-                        </div>
+            <div class="panel-section">
+                <div class="section-header">
+                    <h2 id="tasksTitle">Tasks</h2>
+                    <span class="count-badge" id="tasksCount">0</span>
                 </div>
+                <!-- Search bar for tasks -->
+                <input type="text" class="search-bar" id="taskSearch"
+                       placeholder="🔍 Search tasks..." oninput="filterItems('tasks')">
+                <div id="tasksContainer" class="items-container"></div>
+            </div>
 
-            </section>
-        </main>
+            <div class="panel-section">
+                <div class="section-header">
+                    <h2 id="notesTitle">Notes</h2>
+                    <span class="count-badge" id="notesCount">0</span>
+                </div>
+                <!-- Search bar for notes -->
+                <input type="text" class="search-bar" id="noteSearch"
+                       placeholder="🔍 Search notes..." oninput="filterItems('notes')">
+                <div id="notesContainer" class="items-container"></div>
+            </div>
+
+        </section>
+    </main>
+</div>
+
+<!-- =====================================================================
+     MEMORY PANEL MODAL
+     ===================================================================== -->
+<div class="modal-overlay" id="memoryOverlay" onclick="toggleMemoryPanel()" style="display:none;"></div>
+<div class="memory-panel" id="memoryPanel" style="display:none;">
+    <div class="memory-header">
+        <h3>🧠 What I Know About You</h3>
+        <button class="close-btn" onclick="toggleMemoryPanel()">×</button>
     </div>
+    <p class="memory-subtitle">The agent remembers these facts permanently across all sessions.</p>
+    <div id="memoryList" class="memory-list"></div>
+    <div class="memory-add">
+        <input type="text" id="memoryKeyInput" placeholder="Key (e.g. exam_date)">
+        <input type="text" id="memoryValueInput" placeholder="Value (e.g. May 15 2026)">
+        <button onclick="addMemoryEntry()">Save</button>
+    </div>
+</div>
 
-    <script src="{{ url_for('static', filename='script.js') }}"></script>
+<!-- =====================================================================
+     DAILY BRIEFING PANEL
+     ===================================================================== -->
+<div class="modal-overlay" id="briefingOverlay" onclick="toggleBriefing()" style="display:none;"></div>
+<div class="briefing-panel" id="briefingPanel" style="display:none;">
+    <div class="briefing-header">
+        <h3 id="briefingTitle">📋 Daily Briefing</h3>
+        <button class="close-btn" onclick="toggleBriefing()">×</button>
+    </div>
+    <div id="briefingContent" class="briefing-content">Loading...</div>
+</div>
+
+<!-- =====================================================================
+     ANALYTICS PANEL MODAL
+     ===================================================================== -->
+<div class="modal-overlay" id="analyticsOverlay" onclick="toggleAnalytics()" style="display:none;"></div>
+<div class="analytics-panel" id="analyticsPanel" style="display:none;">
+    <div class="analytics-header">
+        <h3>📊 Productivity Analytics</h3>
+        <button class="close-btn" onclick="toggleAnalytics()">×</button>
+    </div>
+    <div id="analyticsContent" class="analytics-content">Loading...</div>
+</div>
+
+<script src="{{ url_for('static', filename='script.js') }}"></script>
 </body>
 </html>
