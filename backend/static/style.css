@@ -362,3 +362,81 @@ header { background: var(--panel-bg); padding: 15px 30px; border-bottom: 1px sol
 @keyframes pulse { 0% { opacity: 1; } 50% { opacity: 0.6; } 100% { opacity: 1; } }
 .loader { border: 3px solid rgba(255,255,255,0.4); border-top: 3px solid white; border-radius: 50%; width: 18px; height: 18px; animation: spin 1s linear infinite; }
 @keyframes spin { 0% { transform: rotate(0deg); } 100% { transform: rotate(360deg); } }
+
+/* =========================================
+   NEW: Workspace Tree / Accordion UI
+   ========================================= */
+.workspace-header {
+    display: flex; justify-content: space-between; align-items: center;
+    cursor: pointer; padding: 10px 14px;
+    border-radius: 8px; transition: background 0.15s;
+    user-select: none;
+}
+.workspace-header:hover { background: rgba(0,0,0,0.03); }
+.workspace-left { display: flex; align-items: center; gap: 8px; flex: 1; min-width: 0; }
+.workspace-title { font-weight: 700; font-size: 0.95rem; color: var(--text-main); }
+.ws-counts { font-size: 0.75rem; color: var(--text-muted); white-space: nowrap; }
+.accordion-arrow { font-size: 0.7rem; color: var(--text-muted); transition: transform 0.2s; flex-shrink: 0; }
+.accordion-body { padding-left: 8px; }
+
+/* Spaces inside workspaces */
+.space-row { margin: 6px 0; border-radius: 8px; background: #fafafa; border: 1px solid var(--border-color); overflow: hidden; }
+.space-header {
+    display: flex; align-items: center; gap: 8px;
+    padding: 8px 12px; cursor: pointer; user-select: none;
+    transition: background 0.15s;
+}
+.space-header:hover { background: #f3f4f6; }
+.space-dot { width: 10px; height: 10px; border-radius: 50%; flex-shrink: 0; }
+.space-name { font-weight: 600; font-size: 0.88rem; flex: 1; }
+.space-count { font-size: 0.75rem; color: var(--text-muted); }
+.empty-space-msg { color: var(--text-muted); font-size: 0.82rem; padding: 8px 12px; font-style: italic; }
+.unspaced-tasks { padding: 4px 0; }
+
+/* Task tree items inside workspace accordion */
+.task-tree-item {
+    padding: 8px 12px; border-left: 3px solid transparent;
+    margin: 4px 0; border-radius: 6px; background: white;
+    border: 1px solid #f0f0f0;
+}
+.task-tree-item.task-done { opacity: 0.6; }
+.task-tree-item.task-overdue { border-left-color: var(--danger-color); background: #fff5f5; }
+.task-tree-header { display: flex; align-items: center; justify-content: space-between; gap: 6px; }
+.task-tree-left { display: flex; align-items: center; gap: 6px; flex: 1; min-width: 0; }
+.task-tree-title { font-size: 0.88rem; color: var(--text-main); }
+.task-tree-title.task-title-done { text-decoration: line-through; color: var(--text-muted); }
+.task-tree-badges { display: flex; align-items: center; gap: 4px; flex-wrap: wrap; }
+.task-tree-meta { font-size: 0.75rem; color: var(--text-muted); padding: 2px 0 0 26px; }
+.task-expand-btn { cursor: pointer; font-size: 0.65rem; color: var(--text-muted); width: 14px; flex-shrink: 0; }
+.task-expand-spacer { width: 14px; flex-shrink: 0; }
+.delete-btn-sm { background: none; border: none; color: var(--text-muted); cursor: pointer; font-size: 0.85rem; padding: 0 2px; line-height: 1; }
+.delete-btn-sm:hover { color: var(--danger-color); }
+
+/* Subtask progress bar */
+.subtask-progress-bar { height: 4px; background: #e5e7eb; border-radius: 2px; margin: 4px 0 2px 26px; overflow: hidden; }
+.subtask-progress-fill { height: 100%; background: var(--accent-color); border-radius: 2px; transition: width 0.3s; }
+.subtask-count { font-size: 0.72rem; color: var(--text-muted); padding-left: 26px; }
+
+/* Subtask list items */
+.subtask-list { padding: 4px 0 4px 20px; display: flex; flex-direction: column; gap: 4px; }
+.subtask-item { display: flex; align-items: center; gap: 8px; font-size: 0.84rem; color: var(--text-main); padding: 3px 0; }
+.subtask-item.subtask-done { color: var(--text-muted); text-decoration: line-through; }
+.subtask-title { flex: 1; }
+
+/* Task list panel badge row */
+.task-badges { display: flex; flex-wrap: wrap; gap: 4px; margin: 4px 0 2px 0; }
+.note-badges { display: flex; flex-wrap: wrap; gap: 4px; margin: 4px 0; }
+
+/* Space tag (new, distinct from workspace tag) */
+.space-tag {
+    display: inline-block; background: #e0f2fe; color: #0369a1;
+    border-radius: 4px; padding: 1px 6px; font-size: 0.7rem; font-weight: 600;
+}
+
+/* Subtask badge on task cards */
+.subtask-badge {
+    display: inline-block; background: #fef3c7; color: #92400e;
+    border-radius: 4px; padding: 1px 6px; font-size: 0.7rem; font-weight: 600;
+}
+.priority-badge { display: inline-block; border-radius: 4px; padding: 1px 6px; font-size: 0.7rem; font-weight: 700; }
+.high-badge { background: #fee2e2; color: #b91c1c; }

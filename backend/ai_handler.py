@@ -4,7 +4,9 @@ import re
 import time
 import asyncio
 import logging
-from datetime import datetime
+import numpy as np
+from sklearn.metrics.pairwise import cosine_similarity
+from datetime import datetime, timedelta
 from dotenv import load_dotenv
 
 load_dotenv()
@@ -17,10 +19,13 @@ try:
     from google.adk.runners import Runner
     from google.adk.sessions import InMemorySessionService
     from google.genai import types
+    from google import genai 
+    from pydantic import BaseModel, Field
+    from typing import List, Optional
     ADK_AVAILABLE = True
 except ImportError:
     ADK_AVAILABLE = False
-    logging.warning("google-adk not found. Run: pip install google-adk google-genai")
+    logging.warning("google-adk or pydantic not found. Run: pip install google-adk google-genai pydantic")
 
 
 def _run_async(coro):
@@ -36,545 +41,687 @@ def _run_async(coro):
         return asyncio.run(coro)
 
 
-class AdkAgentHandler:
+# ======================================================================================
+# PYDANTIC MODELS FOR STRUCTURED OUTPUTS
+# ======================================================================================
+class SubtaskPlan(BaseModel):
+    title: str = Field(description="Title of the subtask")
+
+class TaskPlan(BaseModel):
+    title: str = Field(description="Title of the task")
+    description: str = Field(default="", description="Optional description")
+    due_date: str = Field(default="", description="YYYY-MM-DD")
+    due_time: str = Field(default="", description="HH:MM")
+    priority: str = Field(default="medium", description="high, medium, or low")
+    subtasks: List[SubtaskPlan] = Field(default_factory=list)
+
+class SpacePlan(BaseModel):
+    name: str = Field(description="Name of the space, phase, or day")
+    tasks: List[TaskPlan] = Field(description="Tasks belonging to this space")
+
+class WorkspacePlan(BaseModel):
+    name: str = Field(description="Name of the overall project or workspace")
+    description: str = Field(default="")
+    color: str = Field(default="#8A2BE2")
+
+class ProjectPlan(BaseModel):
+    workspace: WorkspacePlan
+    spaces: List[SpacePlan]
+
+
+# ======================================================================================
+# HEAVY AGENT: Handles Complex Planning, Workspaces, and Analytics
+# ======================================================================================
+class AdkComplexHandler:
     def __init__(self, database):
         self.db = database
         self.session_service = InMemorySessionService()
-        self.session_id = "yahya_igenda_session"
-        self._last_memory = None
+        self.embedder = EnhancedRAGHandler().model
+        self._precompute_tool_embeddings()
 
+    def _precompute_tool_embeddings(self):
+        logging.info("Precomputing tool embeddings for Dynamic Retrieval...")
+        # Precompute using a dummy user to grab metadata (tool names and docstrings don't change per user)
+        dummy_tools = self._register_tools("dummy_user")
+        self._tool_metadata = [{"name": f.__name__, "doc": f.__doc__ or ""} for f in dummy_tools]
+        
+        self.tool_docs = []
+        for meta in self._tool_metadata:
+            search_text = f"{meta['name'].replace('_', ' ')}: {meta['doc']}"
+            self.tool_docs.append(search_text)
+            
+        self.tool_vectors = self.embedder.encode(self.tool_docs)
+
+    def _get_semantic_memory(self, user_id: str, query: str, top_k: int = 3) -> str:
+        """Retrieves only the most relevant memory facts using vector search."""
         try:
-            _run_async(self.session_service.create_session(
-                app_name="iGenda_App",
-                user_id="yahya",
-                session_id=self.session_id
-            ))
-            logging.info("ADK session created.")
+            memories = self.db.get_all_memory(user_id=user_id)
+            if not memories:
+                return "No persistent memory found."
+            
+            mem_items = list(memories.items())
+            mem_texts = [f"{k}: {v}" for k, v in mem_items]
+            
+            query_vec = self.embedder.encode([query])
+            mem_vecs = self.embedder.encode(mem_texts)
+            similarities = cosine_similarity(query_vec, mem_vecs)[0]
+            
+            top_indices = np.argsort(similarities)[::-1][:top_k]
+            relevant_memories = [mem_texts[i] for i in top_indices if similarities[i] > 0.2]
+            
+            if not relevant_memories:
+                return "No highly relevant memory found for this specific query."
+            return "\n".join(relevant_memories)
         except Exception as e:
-            logging.warning(f"Session init warning: {e}")
+            logging.warning(f"Semantic memory error: {e}")
+            return "Memory unavailable."
 
-        self._register_tools()
-        self._build_agent()
+    def _retrieve_tools(self, user_id: str, user_message: str, top_k: int = 8) -> list:
+        query_vector = self.embedder.encode([user_message])
+        similarities = cosine_similarity(query_vector, self.tool_vectors)[0]
+        top_indices = np.argsort(similarities)[::-1]
+        
+        # Instantiate actual tools strictly scoped to this user_id
+        actual_tools = self._register_tools(user_id)
+        tools_by_name = {f.__name__: f for f in actual_tools}
+        
+        selected_tools = []
+        mandatory_tools = ['tool_get_context', 'db_create_project_plan'] 
+        
+        for idx in top_indices:
+            tool_name = self._tool_metadata[idx]['name']
+            func = tools_by_name[tool_name]
+            if func not in selected_tools:
+                selected_tools.append(func)
+            if len(selected_tools) >= top_k:
+                break
+                
+        for func_name in mandatory_tools:
+            func = tools_by_name[func_name]
+            if func not in selected_tools:
+                selected_tools.append(func)
+                
+        logging.info(f"Dynamically retrieved {len(selected_tools)} tools for this prompt.")
+        return selected_tools
 
-    def _register_tools(self):
+    def _register_tools(self, user_id: str):
         db = self.db
 
-        # ----------------------------------------------------------------
-        # CONTEXT & MEMORY TOOLS
-        # ----------------------------------------------------------------
         def tool_get_context() -> str:
-            """
-            Get full situational awareness: today's date/time, today's tasks,
-            overdue tasks, upcoming tasks, and all persistent memory.
-            Call this at the start of any planning, summary, or scheduling request.
-            """
+            """Get the user's daily schedule, overdue tasks, and upcoming tasks."""
             return json.dumps({
                 "now": datetime.now().strftime('%Y-%m-%d %H:%M'),
                 "day_of_week": datetime.now().strftime('%A'),
-                "todays_tasks": db.get_todays_tasks(),
-                "overdue_tasks": db.get_overdue_tasks(),
-                "upcoming_tasks": db.get_upcoming_tasks(days=3),
-                "user_memory": db.get_all_memory(),
+                "todays_tasks": db.get_todays_tasks(user_id=user_id),
+                "overdue_tasks": db.get_overdue_tasks(user_id=user_id),
+                "upcoming_tasks": db.get_upcoming_tasks(user_id=user_id, days=3),
             }, ensure_ascii=False)
 
         def tool_daily_briefing() -> str:
-            """
-            Generate a full daily briefing for Yahya.
-            Call this when Yahya says 'daily briefing', 'good morning', 'what's my day like',
-            'what should I do', or any morning/planning request.
-            Returns overdue tasks, today's schedule, upcoming deadlines, and memory context.
-            """
-            return json.dumps(db.get_daily_briefing(), ensure_ascii=False)
+            """Generate a daily briefing, morning report, or daily summary."""
+            return json.dumps(db.get_daily_briefing(user_id=user_id), ensure_ascii=False)
 
         def tool_save_memory(key: str, value: str) -> str:
-            """
-            Permanently remember something about Yahya across all sessions.
-            Call whenever Yahya shares preferences, goals, habits, or personal facts.
-            Examples: key='study_hours', value='9pm-11pm'
-                      key='exam_date', value='May 15 2026 — Networks final'
-                      key='goal', value='Graduate with distinction'
-            """
-            db.save_memory(key, value)
-            return f"Remembered: {key} = {value}"
+            """Remember facts, user preferences, habits, or personal data permanently."""
+            try:
+                db.save_memory(user_id=user_id, key=key, value=value)
+                return f"Remembered: {key} = {value}"
+            except Exception as e:
+                return f"FAILED: Could not save memory. Error: {e}"
 
         def tool_get_memory(key: str) -> str:
-            """Retrieve a specific memory value by key."""
-            val = db.get_memory(key)
-            return val if val else f"No memory for key '{key}'"
+            """Retrieve specific saved memories or preferences about the user."""
+            val = db.get_memory(user_id=user_id, key=key)
+            return val if val else f"FAILED: No memory found for key '{key}'"
 
         def tool_web_search(query: str) -> str:
-            """Search the live internet for up-to-date facts, news, or research."""
+            """Search the internet for external facts, news, or research."""
             try:
                 from ddgs import DDGS
                 results = DDGS().text(query, max_results=3)
-                if not results:
-                    return "No results found."
+                if not results: return "FAILED: No results found on the web."
                 return "\n\n".join([f"Title: {r['title']}\nSnippet: {r['body']}" for r in results])
-            except ImportError:
-                try:
-                    from duckduckgo_search import DDGS as DDGS2
-                    results = DDGS2().text(query, max_results=3)
-                    if not results:
-                        return "No results found."
-                    return "\n\n".join([f"Title: {r['title']}\nSnippet: {r['body']}" for r in results])
-                except ImportError:
-                    return "Error: run pip install ddgs"
             except Exception as e:
-                return f"Web search failed: {e}"
+                return f"FAILED: Web search error: {e}"
 
         def tool_search_my_data(query: str, item_type: str = "all") -> str:
-            """Search Yahya's tasks, notes, or workspaces by keyword."""
-            return json.dumps(db.search_data(query, item_type), ensure_ascii=False)
+            """Search the internal database for existing tasks, notes, or projects."""
+            return json.dumps(db.search_data(user_id=user_id, query=query, item_type=item_type), ensure_ascii=False)
 
         def tool_check_schedule(date: str, time: str) -> str:
-            """ALWAYS call before creating a timed task to check for conflicts."""
-            return db.check_schedule_conflict(date, time)
-
-        # ----------------------------------------------------------------
-        # TASK TOOLS
-        # ----------------------------------------------------------------
-        def db_create_task(title: str, description: str = "", due_date: str = "",
-                           due_time: str = "", priority: str = "medium",
-                           workspace_id: int = None, recurrence: str = None,
-                           depends_on: int = None) -> str:
-            """
-            Create a new task.
-            - priority: MUST be 'high' for anything urgent, important, or time-sensitive.
-                        Use 'medium' for normal tasks. Use 'low' for optional tasks.
-            - recurrence: 'daily', 'weekly', 'biweekly', 'monthly', or None
-            - depends_on: task_id of a prerequisite task
-            Always call tool_check_schedule first if a due_time is given.
-            """
-            task = db.create_task(
-                title=title, description=description, due_date=due_date,
-                due_time=due_time, priority=priority, workspace_id=workspace_id,
-                recurrence=recurrence, depends_on=depends_on
-            )
-            todays_count = len(db.get_todays_tasks())
-            return json.dumps({
-                "status": "created", "task_id": task['id'], "title": task['title'],
-                "tasks_today": todays_count,
-                "recurrence": recurrence,
-                "tip": "Warn if tasks_today > 6 — heavy schedule."
-            })
-
-        def db_complete_task(task_id: int) -> str:
-            """
-            Mark a task as completed. If it's recurring, the next occurrence is created automatically.
-            Use when Yahya says he finished, completed, or is done with something.
-            Search for the task first to confirm the correct task_id.
-            """
-            task = db.complete_task(task_id)
-            if not task:
-                return f"Task ID {task_id} not found."
-            msg = f"✅ Task '{task['title']}' marked as complete!"
-            if task.get('recurrence'):
-                msg += f" Next occurrence created ({task['recurrence']})."
-            return msg
-
-        def db_update_task(task_id: int, title: str = None, description: str = None,
-                           due_date: str = None, due_time: str = None,
-                           priority: str = None, recurrence: str = None,
-                           depends_on: int = None, workspace_id: int = None) -> str:
-            """Update any field of an existing task including priority and workspace."""
-            updates = {k: v for k, v in [
-                ('title', title), ('description', description), ('due_date', due_date),
-                ('due_time', due_time), ('priority', priority),
-                ('recurrence', recurrence), ('depends_on', depends_on),
-                ('workspace_id', workspace_id)
-            ] if v is not None}
-            if not updates:
-                return "No valid fields to update."
-            task = db.update_task(task_id, updates)
-            return f"Task updated: {task['title']}" if task else f"Task ID {task_id} not found."
-
-        def db_link_note_to_task(task_id: int, note_id: int) -> str:
-            """
-            Link a research note to a task as reference material.
-            Use when Yahya says 'this note is for my X task' or after researching a topic
-            that relates to a specific task.
-            """
-            task = db.update_task(task_id, {'linked_note_id': note_id})
-            note = db.update_note(note_id, {'linked_task_id': task_id})
-            if task and note:
-                return f"Linked note '{note['title']}' to task '{task['title']}'."
-            return "Could not link — check task_id and note_id."
-
-        def db_check_task_blocked(task_id: int) -> str:
-            """Check if a task is blocked by an incomplete dependency."""
-            blocked = db.is_task_blocked(task_id)
-            return f"Task {task_id} is {'BLOCKED — dependency not yet complete' if blocked else 'not blocked — ready to work on'}."
-
-        # ----------------------------------------------------------------
-        # NOTE TOOLS
-        # ----------------------------------------------------------------
-        def db_create_note(title: str, content: str, workspace_id: int = None,
-                           linked_task_id: int = None) -> str:
-            """
-            Create a note. Use for research findings, summaries, or anything to save.
-            linked_task_id: optionally link this note to a related task.
-            """
-            note = db.create_note(title=title, content=content,
-                                   workspace_id=workspace_id, linked_task_id=linked_task_id)
-            return json.dumps({"status": "created", "note_id": note['id'], "title": note['title']})
-
-        def db_update_note(note_id: int, title: str = None, content: str = None,
-                           workspace_id: int = None, category: str = None) -> str:
-            """Update a note's title, content, workspace, or category."""
-            updates = {k: v for k, v in [
-                ('title', title), ('content', content),
-                ('workspace_id', workspace_id), ('category', category)
-            ] if v is not None}
-            if not updates:
-                return "No valid fields to update."
-            note = db.update_note(note_id, updates)
-            return f"Note updated: {note['title']}" if note else f"Note ID {note_id} not found."
-
-        # ----------------------------------------------------------------
-        # WORKSPACE TOOLS
-        # ----------------------------------------------------------------
-        def db_create_workspace(name: str, description: str = "",
-                                color: str = "#8A2BE2") -> str:
-            """
-            Create a workspace to group related tasks and notes.
-            color: hex color string e.g. '#8A2BE2', '#ef4444', '#10b981', '#f59e0b', '#3b82f6'
-            """
-            ws = db.create_workspace(name=name, description=description, color=color)
-            return json.dumps({"status": "created", "workspace_id": ws['id'], "name": ws['name']})
-
-        def db_update_workspace_color(workspace_id: int, color: str) -> str:
-            """Change a workspace's color. Use hex colors like '#ef4444' for red, '#10b981' for green."""
-            ws = db.update_workspace(workspace_id, {'color': color})
-            return f"Workspace color updated." if ws else f"Workspace ID {workspace_id} not found."
-
-        def db_delete_item(item_type: str, item_id: int) -> str:
-            """Delete a task, note, or workspace by ID."""
-            item_type = item_type.lower()
-            if item_type == 'task':
-                success = db.delete_task(item_id)
-            elif item_type == 'note':
-                success = db.delete_note(item_id)
-            elif item_type == 'workspace':
-                success = db.delete_workspace(item_id)
-            else:
-                return "item_type must be 'task', 'note', or 'workspace'."
-            return "Deleted successfully." if success else f"ID {item_id} not found."
+            """Check if a specific time slot is free or conflicts with existing tasks."""
+            return db.check_schedule_conflict(user_id=user_id, check_date=date, check_time=time)
 
         def tool_analyze_productivity() -> str:
-            """
-            Run a deep behavioral analysis of Yahya's productivity patterns.
-            Call this when Yahya asks ANY of the following (or similar):
-            - "analyze me", "how productive am I", "what's my completion rate"
-            - "what time am I most active", "when do I create most tasks"
-            - "what day is my busiest", "which day has the most tasks"
-            - "what do I procrastinate on", "what category do I avoid"
-            - "how long does it take me to complete tasks"
-            - "which workspace am I most productive in"
-            - "give me insights", "analyze my habits", "productivity report"
-            - "how many tasks did I complete this week"
-            - Any question about patterns, trends, statistics, or behavior
-            Returns full analytics including completion rates, time patterns,
-            category breakdowns, procrastination index, streaks, and weekly trends.
-            """
-            data = db.get_smart_analytics()
-            return json.dumps(data, ensure_ascii=False)
+            """Get statistics, analytics, and habits about completed tasks and procrastination."""
+            try:
+                data = db.get_smart_analytics(user_id=user_id)
+                return json.dumps(data, ensure_ascii=False)
+            except Exception as e:
+                return f"FAILED: Could not analyze productivity. Error: {e}"
 
-        self._tools = [
-            # Context & intelligence
+        def db_create_project_plan(plan_data: ProjectPlan) -> str:
+            """
+            CRITICAL: USE THIS TOOL FOR ANY REQUEST TO PLAN A TRIP, STUDY SCHEDULE, OR COMPLEX PROJECT.
+            Creates a full workspace, spaces, tasks, and subtasks perfectly structured using Pydantic.
+            """
+            try:
+                ws = db.create_workspace(user_id=user_id, name=plan_data.workspace.name, description=plan_data.workspace.description, color=plan_data.workspace.color)
+                
+                tasks_created = 0
+                subtasks_created = 0
+                
+                for space_data in plan_data.spaces:
+                    sp = db.create_space(user_id=user_id, name=space_data.name, workspace_id=ws['id'])
+                    for task_data in space_data.tasks:
+                        task = db.create_task(
+                            user_id=user_id,
+                            title=task_data.title, 
+                            description=task_data.description,
+                            due_date=task_data.due_date,
+                            due_time=task_data.due_time,
+                            priority=task_data.priority, 
+                            workspace_id=ws['id'], 
+                            space_id=sp['id']
+                        )
+                        tasks_created += 1
+                        
+                        for sub in task_data.subtasks:
+                            db.create_task(user_id=user_id, title=sub.title, parent_id=task['id'], workspace_id=ws['id'], space_id=sp['id'])
+                            subtasks_created += 1
+                            
+                return f"SUCCESS: Created Workspace '{ws['name']}' with {len(plan_data.spaces)} spaces, {tasks_created} tasks, and {subtasks_created} subtasks perfectly nested."
+            except Exception as e:
+                return f"FAILED to create plan: {e}"
+
+        def db_create_workspace(name: str, description: str = "", color: str = "#8A2BE2") -> str:
+            """Create a single new workspace (top-level project folder). Do not use for complex projects."""
+            try:
+                ws = db.create_workspace(user_id=user_id, name=name, description=description, color=color)
+                return json.dumps({"status": "created", "workspace_id": ws['id'], "name": ws['name']})
+            except Exception as e: return f"FAILED: Error creating workspace: {e}"
+
+        def db_create_space(name: str, workspace_id: int, description: str = "", color: str = "#8A2BE2") -> str:
+            """Create a single space (sub-folder) inside an existing workspace."""
+            try:
+                space = db.create_space(user_id=user_id, name=name, workspace_id=workspace_id, description=description, color=color)
+                return json.dumps({"status": "created", "space_id": space['id'], "name": space['name'], "workspace_id": workspace_id})
+            except Exception as e: return f"FAILED: Error creating space. Ensure workspace_id {workspace_id} is valid. Error: {e}"
+
+        def db_update_workspace_color(workspace_id: int, color: str) -> str:
+            """Change the visual color of a workspace."""
+            try:
+                ws = db.update_workspace(user_id=user_id, workspace_id=workspace_id, updates={'color': color})
+                return "Workspace color updated." if ws else f"FAILED: Workspace ID {workspace_id} not found."
+            except Exception as e: return f"FAILED: Error updating color: {e}"
+
+        def db_delete_item(item_type: str, item_id: int) -> str:
+            """Delete a task, note, workspace, or space from the database."""
+            try:
+                item_type = item_type.lower()
+                if item_type == 'task': success = db.delete_task(user_id=user_id, task_id=item_id)
+                elif item_type == 'note': success = db.delete_note(user_id=user_id, note_id=item_id)
+                elif item_type == 'workspace': success = db.delete_workspace(user_id=user_id, workspace_id=item_id)
+                elif item_type == 'space': success = db.delete_space(user_id=user_id, space_id=item_id)
+                else: return "FAILED: Invalid type. Must be task, note, workspace, or space."
+                return "Deleted successfully." if success else f"FAILED: ID {item_id} not found."
+            except Exception as e: return f"FAILED: Error deleting item: {e}"
+
+        def db_create_task(title: str, description: str = "", due_date: str = "",
+                           due_time: str = "", priority: str = "medium",
+                           workspace_id: int = None, space_id: int = None,
+                           recurrence: str = None, depends_on: int = None) -> str:
+            """Create a single, isolated task."""
+            try:
+                task = db.create_task(
+                    user_id=user_id, title=title, description=description, due_date=due_date,
+                    due_time=due_time, priority=priority, workspace_id=workspace_id,
+                    space_id=space_id, recurrence=recurrence, depends_on=depends_on
+                )
+                return json.dumps({"status": "created", "task_id": task['id'], "title": task['title']})
+            except Exception as e: return f"FAILED: Error creating task. Check if workspace_id/space_id are valid. Error: {e}"
+
+        def db_create_subtask(title: str, parent_task_id: int, description: str = "",
+                              priority: str = "medium", due_date: str = "") -> str:
+            """Create a subtask (child step) for an existing task."""
+            try:
+                parent = db.get_task_with_subtasks(user_id=user_id, task_id=parent_task_id)
+                if not parent: return f"FAILED: Parent task ID {parent_task_id} not found."
+                task = db.create_task(user_id=user_id, title=title, description=description, due_date=due_date or parent.get('due_date', ''), priority=priority, workspace_id=parent.get('workspace_id'), space_id=parent.get('space_id'), parent_id=parent_task_id)
+                return json.dumps({"status": "created", "subtask_id": task['id'], "title": task['title']})
+            except Exception as e: return f"FAILED: Error creating subtask: {e}"
+
+        def db_get_subtasks(parent_task_id: int) -> str:
+            """Retrieve the list of subtasks for a given parent task."""
+            try:
+                data = db.get_task_with_subtasks(user_id=user_id, task_id=parent_task_id)
+                return json.dumps(data, ensure_ascii=False) if data else f"FAILED: Task ID {parent_task_id} not found."
+            except Exception as e: return f"FAILED: Error getting subtasks: {e}"
+
+        def db_complete_all_subtasks(parent_task_id: int) -> str:
+            """Mark all subtasks of a specific parent task as completed."""
+            try:
+                subtasks = db.get_subtasks(user_id=user_id, parent_id=parent_task_id)
+                count = 0
+                for st in subtasks['subtasks']:
+                    if not st.get('completed'):
+                        db.complete_task(user_id=user_id, task_id=st['id'])
+                        count += 1
+                return f"Marked {count} subtask(s) complete."
+            except Exception as e: return f"FAILED: Error completing subtasks: {e}"
+
+        def db_complete_task(task_id: int) -> str:
+            """Mark a specific task as completed."""
+            try:
+                task = db.complete_task(user_id=user_id, task_id=task_id)
+                return f"Task '{task['title']}' completed!" if task else f"FAILED: Task ID {task_id} not found."
+            except Exception as e: return f"FAILED: Error completing task: {e}"
+
+        def db_update_task(task_id: int, title: str = None, description: str = None,
+                           due_date: str = None, due_time: str = None, priority: str = None,
+                           recurrence: str = None, depends_on: int = None, workspace_id: int = None,
+                           space_id: int = None) -> str:
+            """Modify the details of an existing task."""
+            try:
+                updates = {k: v for k, v in [('title', title), ('description', description), ('due_date', due_date), ('due_time', due_time), ('priority', priority), ('recurrence', recurrence), ('depends_on', depends_on), ('workspace_id', workspace_id), ('space_id', space_id)] if v is not None}
+                task = db.update_task(user_id=user_id, task_id=task_id, updates=updates)
+                return f"Task updated: {task['title']}" if task else f"FAILED: Task ID {task_id} not found."
+            except Exception as e: return f"FAILED: Error updating task: {e}"
+
+        def db_link_note_to_task(task_id: int, note_id: int) -> str:
+            """Link an existing note to an existing task."""
+            try:
+                task = db.update_task(user_id=user_id, task_id=task_id, updates={'linked_note_id': note_id})
+                note = db.update_note(user_id=user_id, note_id=note_id, updates={'linked_task_id': task_id})
+                return f"Linked note to task." if task and note else "FAILED: Task or Note ID not found. Could not link."
+            except Exception as e: return f"FAILED: Error linking item: {e}"
+
+        def db_check_task_blocked(task_id: int) -> str:
+            """Check if a task has dependencies preventing it from being completed."""
+            try:
+                blocked = db.is_task_blocked(user_id=user_id, task_id=task_id)
+                return f"Task {task_id} is {'BLOCKED' if blocked else 'ready to work on'}."
+            except Exception as e: return f"FAILED: Error checking dependencies: {e}"
+
+        def db_create_note(title: str, content: str, workspace_id: int = None,
+                           space_id: int = None, linked_task_id: int = None) -> str:
+            """Create a note containing research, summaries, or text blocks."""
+            try:
+                note = db.create_note(user_id=user_id, title=title, content=content, workspace_id=workspace_id, space_id=space_id, linked_task_id=linked_task_id)
+                return json.dumps({"status": "created", "note_id": note['id'], "title": note['title']})
+            except Exception as e: return f"FAILED: Error creating note: {e}"
+
+        def db_update_note(note_id: int, title: str = None, content: str = None,
+                           workspace_id: int = None, space_id: int = None, category: str = None) -> str:
+            """Update the contents or category of an existing note."""
+            try:
+                updates = {k: v for k, v in [('title', title), ('content', content), ('workspace_id', workspace_id), ('space_id', space_id), ('category', category)] if v is not None}
+                note = db.update_note(user_id=user_id, note_id=note_id, updates=updates)
+                return f"Note updated: {note['title']}" if note else f"FAILED: Note ID {note_id} not found."
+            except Exception as e: return f"FAILED: Error updating note: {e}"
+
+        return [
             tool_get_context, tool_daily_briefing, tool_save_memory, tool_get_memory,
-            tool_web_search, tool_search_my_data, tool_check_schedule,
-            tool_analyze_productivity,
-            # Tasks
-            db_create_task, db_complete_task, db_update_task,
-            db_link_note_to_task, db_check_task_blocked,
-            # Notes
+            tool_web_search, tool_search_my_data, tool_check_schedule, tool_analyze_productivity,
+            db_create_project_plan, db_create_workspace, db_create_space, db_update_workspace_color, db_delete_item,
+            db_create_task, db_create_subtask, db_get_subtasks, db_complete_all_subtasks,
+            db_complete_task, db_update_task, db_link_note_to_task, db_check_task_blocked,
             db_create_note, db_update_note,
-            # Workspaces
-            db_create_workspace, db_update_workspace_color, db_delete_item,
         ]
 
-    # ----------------------------------------------------------------
-    # FIX 1: SHORT-TERM CONTEXT — what was created in this conversation
-    # ----------------------------------------------------------------
-    def _build_short_term_context(self) -> str:
-        """
-        Builds a summary of items created/modified in the last 30 minutes.
-        Injected into every message so the agent always knows which IDs
-        it just created — prevents 'which note did you mean?' confusion.
-        """
+    def _build_short_term_context(self, user_id: str) -> str:
         try:
-            from datetime import timedelta
             cutoff = (datetime.now() - timedelta(minutes=30)).isoformat()
-            tasks = [t for t in self.db.get_tasks() if t.get('created_at', '') > cutoff]
-            notes = [n for n in self.db.get_notes() if n.get('created_at', '') > cutoff]
-            workspaces = [w for w in self.db.get_workspaces() if w.get('created_at', '') > cutoff]
-            if not tasks and not notes and not workspaces:
-                return ""
+            tasks = [t for t in self.db.get_tasks(user_id=user_id, include_subtasks=True) if t.get('created_at', '') > cutoff]
+            workspaces = [w for w in self.db.get_workspaces(user_id=user_id) if w.get('created_at', '') > cutoff]
+            spaces = [s for s in self.db.get_spaces(user_id=user_id) if s.get('created_at', '') > cutoff]
+            
+            if not any([tasks, workspaces, spaces]): return ""
+                
             lines = ["\n=== ITEMS CREATED IN THIS SESSION (last 30 min) ==="]
-            for w in workspaces:
-                lines.append(f"- Workspace '{w['name']}' id:{w['id']} color:{w.get('color','')}")
+            for w in workspaces: lines.append(f"- Workspace '{w['name']}' id:{w['id']}")
+            for s in spaces: lines.append(f"- Space '{s['name']}' id:{s['id']} workspace_id:{s['workspace_id']}")
             for t in tasks:
-                lines.append(f"- Task '{t['title']}' id:{t['id']} workspace_id:{t.get('workspace_id') or 'none'} priority:{t.get('priority','medium')}")
-            for n in notes:
-                lines.append(f"- Note '{n['title']}' id:{n['id']} workspace_id:{n.get('workspace_id') or 'none'}")
-            lines.append("When Yahya says 'that note', 'the workspace I just made', etc — use these IDs.")
+                kind = "Subtask" if t.get('parent_id') else "Task"
+                lines.append(f"- {kind} '{t['title']}' id:{t['id']} workspace_id:{t.get('workspace_id') or 'none'} space_id:{t.get('space_id') or 'none'}")
+            
+            lines.append("\n[CRITICAL DIRECTIVE: The IDs above are for REFERENCE. Do NOT assign new tasks to these workspaces or spaces by default. HOWEVER, if you are explicitly asked to fix a project, add to a recent project, or update a tool call that just failed, you MUST use the appropriate workspace_id and space_id from above.]")
             return "\n".join(lines)
         except Exception:
             return ""
 
-    # ----------------------------------------------------------------
-    # FIX 3: URGENCY DETECTION — inject priority hint before sending
-    # ----------------------------------------------------------------
     def _detect_urgency_hint(self, message: str) -> str:
-        """
-        Scans for urgency keywords and returns a hint string to append
-        to the message. Gemini reads this and sets priority='high'.
-        """
-        urgent_words = [
-            'urgent', 'asap', 'emergency', 'immediately', 'right now',
-            'critical', 'important', 'crucial', 'rush', 'today', 'now',
-            'عاجل', 'مهم', 'ضروري', 'فوري', 'الآن', 'اليوم'
-        ]
+        urgent_words = ['urgent', 'asap', 'emergency', 'immediately', 'right now', 'critical', 'important', 'crucial', 'today', 'now', 'عاجل', 'مهم', 'ضروري', 'فوري', 'الآن', 'اليوم']
         if any(w in message.lower() for w in urgent_words):
             return "\n[AGENT HINT: urgency detected — use priority='high' for any tasks created from this request]"
         return ""
 
-    def _build_agent(self):
-        """
-        Build the Agent with fresh memory context.
-        Runner is created ONCE — never recreated — to preserve the session.
-        """
-        memory_context = self._build_memory_context()
+    def _build_agent(self, selected_tools, user_id, user_message):
+        memory_context = self._get_semantic_memory(user_id, user_message)
+
         instruction = (
             "You are iGenda — an elite, proactive AI productivity agent. "
             "The user is Yahya, a Computer Science student at Mansoura University (Class of 2026).\n\n"
-
-            f"=== PERSISTENT MEMORY ABOUT YAHYA ===\n{memory_context}\n\n"
-
+            f"=== RELEVANT USER MEMORY ===\n{memory_context}\n\n"
             "=== YOUR CORE DIRECTIVES ===\n"
             "1. CONTEXT FIRST: For planning, scheduling, or 'what should I do' — call tool_get_context() first.\n"
-            "2. DAILY BRIEFING: When Yahya says 'daily briefing', 'good morning', 'what's my day', "
-            "or 'what should I do' — call tool_daily_briefing() and give a structured, warm morning report.\n"
-            "3. MEMORY: When Yahya shares anything personal — preferences, goals, habits, deadlines — "
-            "call tool_save_memory() immediately. These persist forever.\n"
-            "4. PROJECT PLANNER: Break large goals into tasks. Create a workspace first with a meaningful "
-            "color, then add logically sequenced tasks with dependencies where appropriate.\n"
-            "5. RECURRENCE: When a task repeats (daily workout, weekly review), set recurrence. "
-            "Completing a recurring task automatically creates the next one.\n"
-            "6. DEPENDENCIES: When task B requires task A to be done first, set depends_on. "
-            "Tell Yahya which tasks are blocked by incomplete prerequisites.\n"
-            "7. RESEARCH & NOTES: For research — web search, synthesize, save as a note, "
-            "then offer to link the note to a related task.\n"
-            "8. SCHEDULER: Check conflicts before creating timed tasks. Warn if schedule is overloaded.\n"
-            "9. COMPLETION: When Yahya says he finished something — search for it, complete it. "
-            "If recurring, tell him the next occurrence was created.\n"
-            "10. HONEST & CARING: Think like a personal assistant who genuinely cares about Yahya's success.\n"
-            # FIX 2: self-correction directive
-            "11. SELF-CORRECT: If a tool call doesn't produce the expected result, try a different "
-            "approach immediately — search for the item's ID first, then retry. NEVER tell Yahya to "
-            "delete and recreate something just because an update failed. Never give up after one attempt.\n"
-            # FIX 2: completion summary directive
-            "12. COMPLETION SUMMARY: After finishing a multi-step request, always end with a clear "
-            "summary of exactly what was done: item names, IDs, which workspace they belong to, "
-            "and anything still pending. Be specific — never just say 'Done!'.\n"
-            "13. PRIORITY: The [AGENT HINT] tag in messages signals urgency — always honour it by "
-            "setting priority='high' on any tasks created in that request.\n"
-            "14. CONTEXT: The [ITEMS CREATED IN THIS SESSION] block shows recent IDs — always "
-            "use these when Yahya refers to 'that note', 'the workspace I just made', etc.\n"
-            "15. ANALYTICS & INSIGHTS: When Yahya asks about his productivity, habits, patterns, "
-            "statistics, completion rate, most active time, busiest day, procrastination, or ANY "
-            "analysis question — call tool_analyze_productivity() immediately. Then interpret the "
-            "numbers in plain language with specific insights and honest observations. Don't just "
-            "repeat the numbers — tell Yahya what they mean. For example: if completion rate is 40%, "
-            "say 'You complete 2 out of every 5 tasks — there's room to improve, especially in [category]'. "
-            "If peak hour is 11pm, say 'You create most tasks late at night — consider planning earlier'. "
-            "Be a productivity coach, not a spreadsheet."
+            "2. DAILY BRIEFING: When Yahya says 'daily briefing' or 'good morning' — call tool_daily_briefing().\n"
+            "3. BULK PROJECT CREATION: For trips, study plans, or complex projects, you MUST use `db_create_project_plan`. NEVER use individual tools (`db_create_workspace`, `db_create_space`, `db_create_task`) for a new project because you cannot chain newly created IDs in parallel. The bulk tool handles everything perfectly.\n"
+            "4. ISOLATION RULE: Single tasks belong to NO workspace (workspace_id=None). ONLY assign a single task to a workspace if explicitly commanded or fixing a failed tool.\n"
+            "5. SELF-CORRECT: If a tool call doesn't produce expected results (returns FAILED), analyze your mistake, rewrite the parameters/JSON, and try again immediately.\n"
+            "6. LANGUAGE: ALWAYS respond in the SAME language Yahya used. Never mix languages.\n"
         )
 
-        self.agent = Agent(
-            name="iGenda_Core_Agent",
-            model="gemini-2.0-flash",
-            description="Elite AI productivity agent for iGenda.",
-            instruction=instruction,
-            tools=self._tools
-        )
+        self.agent = Agent(name="iGenda_Core_Agent", model="gemini-2.5-flash", description="Elite Planner for iGenda.", instruction=instruction, tools=selected_tools)
+        self.runner = Runner(agent=self.agent, app_name="iGenda_App", session_service=self.session_service)
 
-        # Patch existing runner's agent — never create a new Runner (would lose the session)
-        if hasattr(self, 'runner') and self.runner is not None:
-            self.runner._agent = self.agent
-        else:
-            self.runner = Runner(
-                agent=self.agent,
-                app_name="iGenda_App",
-                session_service=self.session_service
-            )
+    def _ensure_session(self, user_id: str):
+        session_id = f"{user_id}_complex_session"
+        try: _run_async(self.session_service.get_session(app_name="iGenda_App", user_id=user_id, session_id=session_id))
+        except Exception: _run_async(self.session_service.create_session(app_name="iGenda_App", user_id=user_id, session_id=session_id))
+        return session_id
 
-    def _build_memory_context(self) -> str:
-        try:
-            memory = self.db.get_all_memory()
-            if not memory:
-                return "No persistent memory yet. Learn about Yahya and save key facts."
-            return "\n".join(f"- {k}: {v}" for k, v in memory.items())
-        except Exception:
-            return "Memory unavailable."
-
-    def _ensure_session(self):
-        try:
-            _run_async(self.session_service.get_session(
-                app_name="iGenda_App", user_id="yahya", session_id=self.session_id
-            ))
-        except Exception:
-            logging.info("Recreating ADK session.")
-            _run_async(self.session_service.create_session(
-                app_name="iGenda_App", user_id="yahya", session_id=self.session_id
-            ))
-
-    def process_message(self, user_message: str, message_type: str = 'text',
-                        context_data: str = None) -> dict:
+    def process_message(self, user_id: str, user_message: str, language: str = 'en', message_type: str = 'text', context_data: str = None) -> dict:
         start_time = time.time()
         tool_events = []
-
         try:
-            self._ensure_session()
-
-            # Only rebuild agent when memory actually changed — saves quota
-            current_memory = self.db.get_all_memory()
-            if current_memory != self._last_memory:
-                self._build_agent()
-                self._last_memory = current_memory
+            session_id = self._ensure_session(user_id)
+            
+            relevant_tools = self._retrieve_tools(user_id, user_message, top_k=8)
+            self._build_agent(relevant_tools, user_id, user_message)
 
             if message_type == 'document_text' and context_data:
                 max_chars = 12000
-                if len(context_data) > max_chars:
-                    context_data = context_data[:max_chars] + "\n\n[Document truncated]"
-                user_message = (
-                    f"I have uploaded a document. My instruction: {user_message}\n\n"
-                    f"--- DOCUMENT CONTENT ---\n{context_data}\n--- END DOCUMENT ---"
-                )
+                if len(context_data) > max_chars: context_data = context_data[:max_chars] + "\n[Document truncated]"
+                user_message = f"I uploaded a document. Instruction: {user_message}\n\n--- DOCUMENT ---\n{context_data}\n--- END DOCUMENT ---"
 
-            # FIX 1: inject short-term context (recently created item IDs)
-            short_term = self._build_short_term_context()
-            if short_term:
-                user_message = user_message + short_term
+            lang_hint = "\n[LANGUAGE DIRECTIVE: Respond in Arabic. Create all task/note titles in Arabic.]" if bool(re.search(r'[\u0600-\u06FF]', user_message)) or language == 'ar' else "\n[LANGUAGE DIRECTIVE: Respond in English. Create all task/note titles in English.]"
+            user_message = user_message + lang_hint + self._build_short_term_context(user_id) + self._detect_urgency_hint(user_message)
 
-            # FIX 3: inject urgency hint if keywords detected
-            urgency_hint = self._detect_urgency_hint(user_message)
-            if urgency_hint:
-                user_message = user_message + urgency_hint
-
-            self.db.save_message('user', user_message)
-
-            content = types.Content(
-                role='user',
-                parts=[types.Part.from_text(text=user_message)]
-            )
-
+            self.db.save_message(user_id, 'user', user_message)
+            content = types.Content(role='user', parts=[types.Part.from_text(text=user_message)])
             final_text = "I couldn't generate a response."
 
-            for event in self.runner.run(
-                user_id="yahya",
-                session_id=self.session_id,
-                new_message=content
-            ):
+            max_retries = 3
+            attempt = 0
+            success = False
+            
+            while attempt < max_retries and not success:
+                attempt += 1
+                tool_failed = False
+                
+                for event in self.runner.run(user_id=user_id, session_id=session_id, new_message=content):
+                    if hasattr(event, 'content') and event.content:
+                        for part in getattr(event.content, 'parts', []):
+                            if hasattr(part, 'function_call') and part.function_call:
+                                tool_events.append({"type": "tool_call", "name": part.function_call.name, "args": dict(part.function_call.args)})
+                            
+                            elif hasattr(part, 'function_response') and part.function_response:
+                                result_str = str(part.function_response.response)
+                                tool_events.append({"type": "tool_result", "name": part.function_response.name, "result": result_str[:300]})
+                                
+                                result_lower = result_str.lower()
+                                if "failed" in result_lower or "error" in result_lower or "not found" in result_lower:
+                                    tool_failed = True
+                                    logging.warning(f"Complex Agent tool failed on attempt {attempt}: {result_str}")
+                                    correction_prompt = f"[SYSTEM: Your last tool call failed with error: {result_str}. Analyze your JSON/parameters, FIX the mistake, and execute again immediately.]"
+                                    content = types.Content(role='user', parts=[types.Part.from_text(text=correction_prompt)])
+                                    break 
+                                    
+                            elif hasattr(part, 'text') and part.text:
+                                final_text = part.text
+                    
+                    if tool_failed:
+                        break 
+                
+                if not tool_failed:
+                    success = True
+
+            self.db.save_message(user_id, 'model', final_text)
+            return {
+                "response_message": final_text, "tool_events": tool_events, "tasks": self.db.get_tasks(user_id=user_id), "notes": self.db.get_notes(user_id=user_id),
+                "workspaces": self.db.get_workspaces(user_id=user_id), "spaces": self.db.get_spaces(user_id=user_id), "processing_time": round(time.time() - start_time, 2),
+                "ai_metadata": {"model_used": "gemini-adk-complex-structured", "retries": attempt - 1, "tools_in_context": len(relevant_tools)}
+            }
+        except Exception as e:
+            logging.error(f"Complex Agent Error: {e}")
+            raise e
+
+# ======================================================================================
+# LIGHTWEIGHT AGENT: The Fast Lane for simple CRUD & Subtasks
+# ======================================================================================
+class AdkActionHandler:
+    def __init__(self, database):
+        self.db = database
+        self.session_service = InMemorySessionService()
+
+    def _register_tools(self, user_id: str):
+        db = self.db
+
+        def db_find_task_id(search_term: str) -> str:
+            """Find the parent_id to create a subtask, or need to update/complete a task."""
+            try:
+                tasks = db.get_tasks(user_id=user_id)
+                matches = []
+                for t in tasks:
+                    if search_term.lower() in t['title'].lower() or search_term.lower() in t.get('description', '').lower():
+                        matches.append(f"ID: {t['id']} | Title: {t['title']}")
+                if not matches: return "FAILED: No matching tasks found. Create it as a new main task instead."
+                return "MATCHES: " + " ; ".join(matches[:3])
+            except Exception as e: return f"FAILED: Error searching for task: {e}"
+
+        def db_create_task(title: str, description: str = "", due_date: str = "", due_time: str = "", priority: str = "medium") -> str:
+            try:
+                task = db.create_task(user_id=user_id, title=title, description=description, due_date=due_date, due_time=due_time, priority=priority)
+                return json.dumps({"status": "created", "task_id": task['id'], "title": task['title']})
+            except Exception as e: return f"FAILED: Error creating task: {e}"
+
+        def db_create_subtask(title: str, parent_task_id: int, description: str = "", priority: str = "medium") -> str:
+            """Break a task into a subtask. MUST call db_find_task_id FIRST to get the parent_task_id."""
+            try:
+                parent = db.get_task_with_subtasks(user_id=user_id, task_id=parent_task_id)
+                if not parent: return f"FAILED: Parent ID {parent_task_id} not found."
+                task = db.create_task(user_id=user_id, title=title, description=description, priority=priority, workspace_id=parent.get('workspace_id'), space_id=parent.get('space_id'), parent_id=parent_task_id)
+                return json.dumps({"status": "created", "subtask_id": task['id'], "title": task['title']})
+            except Exception as e: return f"FAILED: Error creating subtask: {e}"
+
+        def db_complete_task(task_id: int) -> str:
+            try:
+                task = db.complete_task(user_id=user_id, task_id=task_id)
+                return f"Task '{task['title']}' completed!" if task else f"FAILED: Task ID {task_id} not found."
+            except Exception as e: return f"FAILED: Error completing task: {e}"
+
+        def db_update_task(task_id: int, title: str = None, due_date: str = None) -> str:
+            try:
+                updates = {k: v for k, v in [('title', title), ('due_date', due_date)] if v is not None}
+                task = db.update_task(user_id=user_id, task_id=task_id, updates=updates)
+                return "Task updated." if task else "FAILED: Task ID not found."
+            except Exception as e: return f"FAILED: Error updating task: {e}"
+
+        def db_delete_item(item_type: str, item_id: int) -> str:
+            try:
+                if item_type.lower() == 'task': success = db.delete_task(user_id=user_id, task_id=item_id)
+                elif item_type.lower() == 'note': success = db.delete_note(user_id=user_id, note_id=item_id)
+                else: return "FAILED: Invalid type. Must be task or note."
+                return "Deleted." if success else "FAILED: Item ID not found."
+            except Exception as e: return f"FAILED: Error deleting item: {e}"
+
+        def db_create_note(title: str, content: str) -> str:
+            try:
+                note = db.create_note(user_id=user_id, title=title, content=content)
+                return f"Note created: {note['id']}"
+            except Exception as e: return f"FAILED: Error creating note: {e}"
+
+        return [db_find_task_id, db_create_task, db_create_subtask, db_complete_task, db_update_task, db_delete_item, db_create_note]
+
+    def _build_agent(self, tools):
+        instruction = (
+            "You are iGenda's Fast Action Agent. Your ONLY job is to execute quick commands.\n"
+            "1. NO CHAT: Just execute the tool and confirm.\n"
+            "2. SUBTASKS: If asked to add a subtask to an existing task, you MUST call `db_find_task_id(search_term)` FIRST to find the parent_task_id.\n"
+            "3. EXECUTION: Once you have the parent_task_id, call `db_create_subtask`.\n"
+            "4. BILINGUAL: Reply in the same language as the user."
+        )
+        self.agent = Agent(name="iGenda_Action_Agent", model="gemini-2.5-flash", instruction=instruction, tools=tools)
+        self.runner = Runner(agent=self.agent, app_name="iGenda_App", session_service=self.session_service)
+
+    def process_message(self, user_id: str, user_message: str, language: str = 'en') -> dict:
+        start_time = time.time()
+        tool_events = []
+        session_id = f"{user_id}_action_session"
+        
+        try: _run_async(self.session_service.get_session(app_name="iGenda_App", user_id=user_id, session_id=session_id))
+        except Exception: _run_async(self.session_service.create_session(app_name="iGenda_App", user_id=user_id, session_id=session_id))
+        
+        tools = self._register_tools(user_id)
+        self._build_agent(tools)
+        
+        lang_hint = "\n[LANGUAGE DIRECTIVE: Respond in Arabic.]" if bool(re.search(r'[\u0600-\u06FF]', user_message)) else "\n[LANGUAGE DIRECTIVE: Respond in English.]"
+        content = types.Content(role='user', parts=[types.Part.from_text(text=user_message + lang_hint)])
+        final_text = "Action completed."
+
+        max_retries = 3
+        attempt = 0
+        success = False
+        
+        while attempt < max_retries and not success:
+            attempt += 1
+            tool_failed = False
+
+            for event in self.runner.run(user_id=user_id, session_id=session_id, new_message=content):
                 if hasattr(event, 'content') and event.content:
                     for part in getattr(event.content, 'parts', []):
                         if hasattr(part, 'function_call') and part.function_call:
-                            fn = part.function_call
-                            tool_events.append({
-                                "type": "tool_call",
-                                "name": fn.name,
-                                "args": dict(fn.args) if fn.args else {}
-                            })
+                            tool_events.append({"type": "tool_call", "name": part.function_call.name, "args": dict(part.function_call.args)})
                         elif hasattr(part, 'function_response') and part.function_response:
-                            fr = part.function_response
-                            tool_events.append({
-                                "type": "tool_result",
-                                "name": fr.name,
-                                "result": str(fr.response)[:300]
-                            })
+                            result_str = str(part.function_response.response)
+                            tool_events.append({"type": "tool_result", "name": part.function_response.name, "result": result_str[:300]})
+                            
+                            result_lower = result_str.lower()
+                            if "not found" in result_lower or "error" in result_lower or "failed" in result_lower:
+                                tool_failed = True
+                                logging.warning(f"Action Agent tool failed on attempt {attempt}: {result_str}")
+                                correction_prompt = f"[SYSTEM: Tool failed: {result_str}. Try a different ID or fix the parameters and execute again.]"
+                                content = types.Content(role='user', parts=[types.Part.from_text(text=correction_prompt)])
+                                break
+                                
                         elif hasattr(part, 'text') and part.text:
                             final_text = part.text
+                
+                if tool_failed:
+                    break
+            
+            if not tool_failed:
+                success = True
 
-            self.db.save_message('model', final_text)
+        return {
+            "response_message": final_text, "tool_events": tool_events, "tasks": self.db.get_tasks(user_id=user_id), "notes": self.db.get_notes(user_id=user_id),
+            "workspaces": self.db.get_workspaces(user_id=user_id), "spaces": self.db.get_spaces(user_id=user_id), "processing_time": round(time.time() - start_time, 2),
+            "ai_metadata": {"model_used": "gemini-adk-action", "retries": attempt - 1}
+        }
 
-            # Proactive overdue warning
-            overdue = self.db.get_overdue_tasks()
-            if overdue and 'overdue' not in user_message.lower() and len(tool_events) < 2:
-                titles = ', '.join(t['title'] for t in overdue[:3])
-                final_text += f"\n\n⚠️ **Heads up:** You have {len(overdue)} overdue task(s): {titles}."
-
-            return {
-                "response_message": final_text,
-                "tool_events": tool_events,
-                "tasks": self.db.get_tasks(),
-                "notes": self.db.get_notes(),
-                "workspaces": self.db.get_workspaces(),
-                "processing_time": round(time.time() - start_time, 2),
-                "ai_metadata": {"model_used": "gemini-adk"}
-            }
-
-        except Exception as e:
-            logging.error(f"ADK Agent Error: {e}", exc_info=True)
-            raise e
-
-
+# ======================================================================================
+# MASTER HANDLER & INTENT ROUTER
+# ======================================================================================
 class EnhancedAIHandler:
     def __init__(self):
         self.enhanced_rag = EnhancedRAGHandler()
         self.summarizer = LocalSummarizer()
         self.api_key = os.environ.get("GEMINI_API_KEY")
         self.use_adk = ADK_AVAILABLE and bool(self.api_key)
-        self.adk_agent = None
+        self.heavy_core_agent = None
+        self.light_action_agent = None
         logging.info(f"AI Handler initialized. ADK active: {self.use_adk}")
 
-    def process_multimodal_message(self, user_message, message_type='text',
-                                   context_data=None, database=None, language='en'):
-        if self.use_adk and database:
-            if not self.adk_agent:
-                self.adk_agent = AdkAgentHandler(database)
-            try:
-                return self.adk_agent.process_message(user_message, message_type, context_data)
-            except Exception as e:
-                logging.warning(f"ADK failed, falling back. Error: {e}")
+    def _route_intent(self, user_message: str) -> str:
+        instruction = (
+            "You are an intent classification router for an AI productivity app. "
+            "The user may speak in English or Arabic. "
+            "Classify the user's message into EXACTLY ONE of these categories:\n\n"
+            "1. ACTION: Creating, updating, deleting, or asking about a single task, note, or reminder. "
+            "(e.g., 'add a task', 'remind me', 'مهمة', 'ذكرني', 'ملاحظة', 'احذف').\n"
+            "2. COMPLEX: Planning a multi-day trip, generating a study schedule, workspaces, complex projects, or anything requiring multiple steps. "
+            "(e.g., 'plan', 'trip', 'schedule', 'project', 'خطط', 'جدول', 'مشروع', 'سفر', 'إجازة').\n"
+            "3. CHAT: Casual conversation, greetings, or general questions not related to database tasks. "
+            "(e.g., 'hello', 'how are you', 'مرحبا', 'كيف حالك').\n\n"
+            "Reply with ONLY the category word: ACTION, COMPLEX, or CHAT."
+        )
+        try:
+            client = genai.Client()
+            response = client.models.generate_content(
+                model='gemini-2.5-flash',
+                contents=user_message,
+                config=types.GenerateContentConfig(system_instruction=instruction, temperature=0.0)
+            )
+            intent = response.text.strip().upper()
+            if intent in ["ACTION", "COMPLEX", "CHAT"]: return intent
+            return "COMPLEX"
+        except Exception as e:
+            logging.error(f"Routing failed: {e}")
+            return "COMPLEX"
 
-        # --- OFFLINE RAG FALLBACK ---
+    def process_multimodal_message(self, user_message, message_type='text', context_data=None, database=None, language='en', user_id='yahya'):
+        if self.use_adk and database:
+            intent = self._route_intent(user_message)
+            logging.info(f"Router classified intent as: {intent} for user {user_id}")
+            
+            if intent == "CHAT":
+                try:
+                    client = genai.Client()
+                    sys_inst = "You are iGenda. Be warm and very brief. Reply in the user's exact language."
+                    response = client.models.generate_content(
+                        model='gemini-2.5-flash', contents=user_message,
+                        config=types.GenerateContentConfig(system_instruction=sys_inst, temperature=0.5)
+                    )
+                    return {
+                        "response_message": response.text, "tool_events": [], 
+                        "tasks": database.get_tasks(user_id=user_id), "notes": database.get_notes(user_id=user_id),
+                        "workspaces": database.get_workspaces(user_id=user_id), "spaces": database.get_spaces(user_id=user_id),
+                        "ai_metadata": {"model_used": "gemini-chat-only"}
+                    }
+                except Exception:
+                    pass
+
+            if intent == "ACTION":
+                if not self.light_action_agent: self.light_action_agent = AdkActionHandler(database)
+                try: return self.light_action_agent.process_message(user_id=user_id, user_message=user_message, language=language)
+                except Exception as e: logging.warning(f"Action Agent failed: {e}. Falling back to Complex.")
+
+            if not self.heavy_core_agent: self.heavy_core_agent = AdkComplexHandler(database)
+            try:
+                return self.heavy_core_agent.process_message(
+                    user_id=user_id, user_message=user_message, language=language, message_type=message_type, context_data=context_data
+                )
+            except Exception as e:
+                logging.warning(f"ADK Complex failed, falling back to offline. Error: {e}")
+
         if message_type == 'document_text':
             text_to_process = context_data if context_data else user_message
             summary, title = self.summarizer.summarize(text_to_process)
             if database:
-                database.create_note(title=f"Summary: {title}", content=summary,
-                                     category="Documents", language="en")
-                return {
-                    "response_message": "Document summarized and saved as a note (Offline Mode).",
-                    "tool_events": [],
-                    "tasks": database.get_tasks(),
-                    "notes": database.get_notes(),
-                    "workspaces": database.get_workspaces()
-                }
-            return {"response_message": "Database not provided.", "tool_events": [],
-                    "tasks": [], "notes": [], "workspaces": []}
+                database.create_note(user_id=user_id, title=f"Summary: {title}", content=summary, category="Documents", language="en")
+                return {"response_message": "Document summarized offline.", "tool_events": [], "tasks": database.get_tasks(user_id=user_id), "notes": database.get_notes(user_id=user_id), "workspaces": database.get_workspaces(user_id=user_id), "spaces": database.get_spaces(user_id=user_id)}
+            return {"response_message": "Database not provided.", "tool_events": [], "tasks": [], "notes": [], "workspaces": [], "spaces": []}
 
         detected_lang = 'ar' if self._is_arabic(user_message) else language
         rag_result = self.enhanced_rag.get_fallback_response(user_message, detected_lang)
 
         if database and 'tasks' in rag_result:
-            for t in rag_result['tasks']:
-                database.create_task(title=t.get('title'), description=t.get('description'),
-                                     due_date=t.get('due_date'))
+            for t in rag_result['tasks']: database.create_task(user_id=user_id, title=t.get('title'), description=t.get('description'), due_date=t.get('due_date'))
         if database and 'notes' in rag_result:
-            for n in rag_result['notes']:
-                database.create_note(title=n.get('title'), content=n.get('content'))
+            for n in rag_result['notes']: database.create_note(user_id=user_id, title=n.get('title'), content=n.get('content'))
 
         rag_result.setdefault('tool_events', [])
+        rag_result.setdefault('spaces', [])
         rag_result['ai_metadata'] = {"model_used": "local-rag-fallback"}
         if database:
-            rag_result['workspaces'] = database.get_workspaces()
+            rag_result['workspaces'] = database.get_workspaces(user_id=user_id)
+            if hasattr(database, 'get_spaces'): rag_result['spaces'] = database.get_spaces(user_id=user_id)
         return rag_result
 
     def _is_arabic(self, text):
         return bool(re.search(r'[\u0600-\u06FF]', text))
 
     def check_model_health(self):
-        if self.use_adk:
-            return {'status': 'healthy', 'model': 'gemini-adk-primary'}
+        if self.use_adk: return {'status': 'healthy', 'model': 'gemini-adk-routed'}
         return {'status': 'healthy', 'model': 'local-rag-fallback'}
