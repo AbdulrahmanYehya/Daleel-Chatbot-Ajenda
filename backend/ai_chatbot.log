@@ -5608,3 +5608,27 @@ name
 2026-03-23 12:20:23,048 INFO werkzeug 127.0.0.1 - - [23/Mar/2026 12:20:23] "GET /api/status HTTP/1.1" 200 -
 2026-03-23 12:20:53,042 INFO werkzeug 127.0.0.1 - - [23/Mar/2026 12:20:53] "GET /api/status HTTP/1.1" 200 -
 2026-03-23 12:20:53,051 INFO werkzeug 127.0.0.1 - - [23/Mar/2026 12:20:53] "GET /api/proactive HTTP/1.1" 200 -
+2026-03-23 12:21:23,045 INFO werkzeug 127.0.0.1 - - [23/Mar/2026 12:21:23] "GET /api/status HTTP/1.1" 200 -
+2026-03-23 12:21:35,757 INFO werkzeug  * Detected change in 'C:\\Aijenda\\Daleel\\Daleel-Chatbot-Ajenda\\backend\\nlp_handler.py', reloading
+2026-03-23 12:21:39,556 INFO werkzeug  * Restarting with watchdog (windowsapi)
+2026-03-23 12:22:17,588 INFO root SQLite database initialized.
+2026-03-23 12:22:17,594 INFO sentence_transformers.SentenceTransformer Use pytorch device_name: cpu
+2026-03-23 12:22:17,595 INFO sentence_transformers.SentenceTransformer Load pretrained SentenceTransformer: all-MiniLM-L6-v2
+2026-03-23 12:22:22,636 INFO root Loaded RAG examples.
+2026-03-23 12:22:22,646 INFO root Loaded RAG index from cache.
+2026-03-23 12:22:22,648 INFO root AI Handler initialized. ADK active: True
+2026-03-23 12:22:22,649 INFO root Database and AI Handler initialized.
+2026-03-23 12:22:22,705 WARNING werkzeug  * Debugger is active!
+2026-03-23 12:22:22,722 INFO werkzeug  * Debugger PIN: 223-987-575
+2026-03-23 12:22:22,787 INFO werkzeug 127.0.0.1 - - [23/Mar/2026 12:22:22] "GET /api/status HTTP/1.1" 200 -
+2026-03-23 12:22:22,811 INFO werkzeug 127.0.0.1 - - [23/Mar/2026 12:22:22] "GET /api/proactive HTTP/1.1" 200 -
+2026-03-23 12:22:53,049 INFO werkzeug 127.0.0.1 - - [23/Mar/2026 12:22:53] "GET /api/proactive HTTP/1.1" 200 -
+2026-03-23 12:23:15,048 INFO werkzeug 127.0.0.1 - - [23/Mar/2026 12:23:15] "GET /api/status HTTP/1.1" 200 -
+2026-03-23 12:23:53,056 INFO werkzeug 127.0.0.1 - - [23/Mar/2026 12:23:53] "GET /api/proactive HTTP/1.1" 200 -
+2026-03-23 12:24:15,085 INFO werkzeug 127.0.0.1 - - [23/Mar/2026 12:24:15] "GET /api/status HTTP/1.1" 200 -
+2026-03-23 12:24:53,044 INFO werkzeug 127.0.0.1 - - [23/Mar/2026 12:24:53] "GET /api/proactive HTTP/1.1" 200 -
+2026-03-23 12:25:15,045 INFO werkzeug 127.0.0.1 - - [23/Mar/2026 12:25:15] "GET /api/status HTTP/1.1" 200 -
+2026-03-23 12:26:15,040 INFO werkzeug 127.0.0.1 - - [23/Mar/2026 12:26:15] "GET /api/status HTTP/1.1" 200 -
+2026-03-23 12:26:15,059 INFO werkzeug 127.0.0.1 - - [23/Mar/2026 12:26:15] "GET /api/proactive HTTP/1.1" 200 -
+2026-03-23 12:27:15,040 INFO werkzeug 127.0.0.1 - - [23/Mar/2026 12:27:15] "GET /api/status HTTP/1.1" 200 -
+2026-03-23 12:27:15,053 INFO werkzeug 127.0.0.1 - - [23/Mar/2026 12:27:15] "GET /api/proactive HTTP/1.1" 200 -
