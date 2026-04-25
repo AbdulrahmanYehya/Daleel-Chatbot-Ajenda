@@ -13,6 +13,9 @@ load_dotenv()
 
 from rag_handler import EnhancedRAGHandler
 from nlp_handler import LocalSummarizer
+import requests
+
+BACKEND_URL = os.getenv("BACKEND_URL")
 
 try:
     from google.adk.agents import Agent
@@ -116,13 +119,13 @@ class AdkComplexHandler:
             logging.warning(f"Semantic memory error: {e}")
             return "Memory unavailable."
 
-    def _retrieve_tools(self, user_id: str, user_message: str, top_k: int = 8) -> list:
+    def _retrieve_tools(self, user_id: str, user_message: str, top_k: int = 8, user_token: str = "") -> list:
         query_vector = self.embedder.encode([user_message])
         similarities = cosine_similarity(query_vector, self.tool_vectors)[0]
         top_indices = np.argsort(similarities)[::-1]
         
         # Instantiate actual tools strictly scoped to this user_id
-        actual_tools = self._register_tools(user_id)
+        actual_tools = self._register_tools(user_id, user_token)
         tools_by_name = {f.__name__: f for f in actual_tools}
         
         selected_tools = []
@@ -144,7 +147,7 @@ class AdkComplexHandler:
         logging.info(f"Dynamically retrieved {len(selected_tools)} tools for this prompt.")
         return selected_tools
 
-    def _register_tools(self, user_id: str):
+    def _register_tools(self, user_id: str, user_token: str = ""):
         db = self.db
 
         def tool_get_context() -> str:
@@ -360,13 +363,275 @@ class AdkComplexHandler:
                 return f"Note updated: {note['title']}" if note else f"FAILED: Note ID {note_id} not found."
             except Exception as e: return f"FAILED: Error updating note: {e}"
 
+        # ── GitHub Tools ──────────────────────────────────────────
+
+        def tool_github_get_issues(repo: str, state: str = "open") -> str:
+            """Get open or closed issues from a GitHub repository."""
+            try:
+                response = requests.get(
+                    f"{BACKEND_URL}/github/issues",
+                    params={"repo": repo, "state": state, "user_id": user_id},
+                    headers={"Authorization": f"Bearer {user_token}"},
+                    timeout=10
+                )
+                data = response.json()
+                if data.get("status") == "error":
+                    return f"FAILED: {data.get('message')}"
+                return json.dumps(data.get("data", {}), ensure_ascii=False)
+            except Exception as e:
+                return f"FAILED: GitHub error: {e}"
+
+        def tool_github_get_prs(repo: str, state: str = "open") -> str:
+            """Get open or closed pull requests from a GitHub repository."""
+            try:
+                response = requests.get(
+                    f"{BACKEND_URL}/github/prs",
+                    params={"repo": repo, "state": state, "user_id": user_id},
+                    headers={"Authorization": f"Bearer {user_token}"},
+                    timeout=10
+                )
+                data = response.json()
+                if data.get("status") == "error":
+                    return f"FAILED: {data.get('message')}"
+                return json.dumps(data.get("data", {}), ensure_ascii=False)
+            except Exception as e:
+                return f"FAILED: GitHub PRs error: {e}"
+
+        def tool_github_create_issue(repo: str, title: str, body: str = "", labels: str = "") -> str:
+            """Create a new issue in a GitHub repository."""
+            try:
+                response = requests.post(
+                    f"{BACKEND_URL}/github/issues",
+                    json={"repo": repo, "title": title, "body": body, "labels": labels, "user_id": user_id},
+                    headers={"Authorization": f"Bearer {user_token}"},
+                    timeout=10
+                )
+                data = response.json()
+                if data.get("status") == "error":
+                    return f"FAILED: {data.get('message')}"
+                return f"SUCCESS: Issue created. {json.dumps(data.get('data', {}), ensure_ascii=False)}"
+            except Exception as e:
+                return f"FAILED: Create issue error: {e}"
+
+        def tool_github_close_issue(repo: str, issue_number: int) -> str:
+            """Close an existing issue in a GitHub repository."""
+            try:
+                response = requests.post(
+                    f"{BACKEND_URL}/github/issues/close",
+                    json={"repo": repo, "issue_number": issue_number, "user_id": user_id},
+                    headers={"Authorization": f"Bearer {user_token}"},
+                    timeout=10
+                )
+                data = response.json()
+                if data.get("status") == "error":
+                    return f"FAILED: {data.get('message')}"
+                return f"SUCCESS: Issue #{issue_number} closed."
+            except Exception as e:
+                return f"FAILED: Close issue error: {e}"
+
+        def tool_github_get_repos() -> str:
+            """Get all GitHub repositories connected to the user's account."""
+            try:
+                response = requests.get(
+                    f"{BACKEND_URL}/github/repos",
+                    params={"user_id": user_id},
+                    headers={"Authorization": f"Bearer {user_token}"},
+                    timeout=10
+                )
+                data = response.json()
+                if data.get("status") == "error":
+                    return f"FAILED: {data.get('message')}"
+                return json.dumps(data.get("data", {}), ensure_ascii=False)
+            except Exception as e:
+                return f"FAILED: Get repos error: {e}"
+
+        # ── Gmail Tools ───────────────────────────────────────────
+
+        def tool_gmail_send(to: str, subject: str, body: str, cc: str = "") -> str:
+            """Send an email via the user's connected Gmail account."""
+            try:
+                response = requests.post(
+                    f"{BACKEND_URL}/gmail/send",
+                    json={"to": to, "subject": subject, "body": body, "cc": cc, "user_id": user_id},
+                    headers={"Authorization": f"Bearer {user_token}"},
+                    timeout=10
+                )
+                data = response.json()
+                if data.get("status") == "error":
+                    return f"FAILED: {data.get('message')}"
+                return "SUCCESS: Email sent."
+            except Exception as e:
+                return f"FAILED: Gmail send error: {e}"
+
+        def tool_gmail_get_inbox(max_results: int = 10, query: str = "") -> str:
+            """Get emails from the user's Gmail inbox. Optionally filter with a search query."""
+            try:
+                response = requests.get(
+                    f"{BACKEND_URL}/gmail/inbox",
+                    params={"max_results": max_results, "query": query, "user_id": user_id},
+                    headers={"Authorization": f"Bearer {user_token}"},
+                    timeout=10
+                )
+                data = response.json()
+                if data.get("status") == "error":
+                    return f"FAILED: {data.get('message')}"
+                return json.dumps(data.get("data", {}), ensure_ascii=False)
+            except Exception as e:
+                return f"FAILED: Gmail inbox error: {e}"
+
+        def tool_gmail_get_message(message_id: str) -> str:
+            """Get the full details of a specific Gmail message by its ID."""
+            try:
+                response = requests.get(
+                    f"{BACKEND_URL}/gmail/message",
+                    params={"message_id": message_id, "user_id": user_id},
+                    headers={"Authorization": f"Bearer {user_token}"},
+                    timeout=10
+                )
+                data = response.json()
+                if data.get("status") == "error":
+                    return f"FAILED: {data.get('message')}"
+                return json.dumps(data.get("data", {}), ensure_ascii=False)
+            except Exception as e:
+                return f"FAILED: Get message error: {e}"
+
+        def tool_gmail_reply(message_id: str, body: str) -> str:
+            """Reply to an existing Gmail email thread."""
+            try:
+                response = requests.post(
+                    f"{BACKEND_URL}/gmail/reply",
+                    json={"message_id": message_id, "body": body, "user_id": user_id},
+                    headers={"Authorization": f"Bearer {user_token}"},
+                    timeout=10
+                )
+                data = response.json()
+                if data.get("status") == "error":
+                    return f"FAILED: {data.get('message')}"
+                return "SUCCESS: Reply sent."
+            except Exception as e:
+                return f"FAILED: Gmail reply error: {e}"
+
+        def tool_gmail_save_draft(to: str, subject: str, body: str) -> str:
+            """Save an email as a draft in Gmail without sending it."""
+            try:
+                response = requests.post(
+                    f"{BACKEND_URL}/gmail/draft",
+                    json={"to": to, "subject": subject, "body": body, "user_id": user_id},
+                    headers={"Authorization": f"Bearer {user_token}"},
+                    timeout=10
+                )
+                data = response.json()
+                if data.get("status") == "error":
+                    return f"FAILED: {data.get('message')}"
+                return "SUCCESS: Draft saved."
+            except Exception as e:
+                return f"FAILED: Save draft error: {e}"
+
+        # ── Google Calendar Tools ─────────────────────────────────
+
+        def tool_calendar_get_events(date_from: str, date_to: str) -> str:
+            """Get Google Calendar events between two dates. Format: YYYY-MM-DD."""
+            try:
+                response = requests.get(
+                    f"{BACKEND_URL}/calendar/events",
+                    params={"date_from": date_from, "date_to": date_to, "user_id": user_id},
+                    headers={"Authorization": f"Bearer {user_token}"},
+                    timeout=10
+                )
+                data = response.json()
+                if data.get("status") == "error":
+                    return f"FAILED: {data.get('message')}"
+                return json.dumps(data.get("data", {}), ensure_ascii=False)
+            except Exception as e:
+                return f"FAILED: Calendar get events error: {e}"
+
+        def tool_calendar_create_event(title: str, start: str, end: str, description: str = "", location: str = "") -> str:
+            """Create a new event in Google Calendar. start/end format: YYYY-MM-DDTHH:MM."""
+            try:
+                response = requests.post(
+                    f"{BACKEND_URL}/calendar/events",
+                    json={"title": title, "start": start, "end": end,
+                          "description": description, "location": location, "user_id": user_id},
+                    headers={"Authorization": f"Bearer {user_token}"},
+                    timeout=10
+                )
+                data = response.json()
+                if data.get("status") == "error":
+                    return f"FAILED: {data.get('message')}"
+                return f"SUCCESS: Event created. {json.dumps(data.get('data', {}), ensure_ascii=False)}"
+            except Exception as e:
+                return f"FAILED: Create event error: {e}"
+
+        def tool_calendar_update_event(event_id: str, title: str = "", start: str = "", end: str = "") -> str:
+            """Update an existing Google Calendar event by its ID."""
+            try:
+                updates = {k: v for k, v in [("title", title), ("start", start), ("end", end)] if v}
+                response = requests.put(
+                    f"{BACKEND_URL}/calendar/events",
+                    json={"event_id": event_id, **updates, "user_id": user_id},
+                    headers={"Authorization": f"Bearer {user_token}"},
+                    timeout=10
+                )
+                data = response.json()
+                if data.get("status") == "error":
+                    return f"FAILED: {data.get('message')}"
+                return "SUCCESS: Event updated."
+            except Exception as e:
+                return f"FAILED: Update event error: {e}"
+
+        def tool_calendar_delete_event(event_id: str) -> str:
+            """Delete a Google Calendar event by its ID."""
+            try:
+                response = requests.delete(
+                    f"{BACKEND_URL}/calendar/events",
+                    json={"event_id": event_id, "user_id": user_id},
+                    headers={"Authorization": f"Bearer {user_token}"},
+                    timeout=10
+                )
+                data = response.json()
+                if data.get("status") == "error":
+                    return f"FAILED: {data.get('message')}"
+                return "SUCCESS: Event deleted."
+            except Exception as e:
+                return f"FAILED: Delete event error: {e}"
+
+        # ── Integration Status ────────────────────────────────────
+
+        def tool_check_integrations() -> str:
+            """Check which external integrations (GitHub, Gmail, Calendar) are connected for the user."""
+            try:
+                response = requests.get(
+                    f"{BACKEND_URL}/status",
+                    params={"user_id": user_id},
+                    headers={"Authorization": f"Bearer {user_token}"},
+                    timeout=10
+                )
+                data = response.json()
+                if data.get("status") == "error":
+                    return f"FAILED: {data.get('message')}"
+                return json.dumps(data.get("data", {}), ensure_ascii=False)
+            except Exception as e:
+                return f"FAILED: Check integrations error: {e}"
+
         return [
+            # ── Original tools ────────────────────────────────────
             tool_get_context, tool_daily_briefing, tool_save_memory, tool_get_memory,
             tool_web_search, tool_search_my_data, tool_check_schedule, tool_analyze_productivity,
             db_create_project_plan, db_create_workspace, db_create_space, db_update_workspace_color, db_delete_item,
             db_create_task, db_create_subtask, db_get_subtasks, db_complete_all_subtasks,
             db_complete_task, db_update_task, db_link_note_to_task, db_check_task_blocked,
             db_create_note, db_update_note,
+            # ── GitHub ────────────────────────────────────────────
+            tool_github_get_issues, tool_github_get_prs, tool_github_create_issue,
+            tool_github_close_issue, tool_github_get_repos,
+            # ── Gmail ─────────────────────────────────────────────
+            tool_gmail_send, tool_gmail_get_inbox, tool_gmail_get_message,
+            tool_gmail_reply, tool_gmail_save_draft,
+            # ── Google Calendar ───────────────────────────────────
+            tool_calendar_get_events, tool_calendar_create_event,
+            tool_calendar_update_event, tool_calendar_delete_event,
+            # ── Integrations Status ───────────────────────────────
+            tool_check_integrations,
         ]
 
     def _build_short_term_context(self, user_id: str) -> str:
@@ -421,13 +686,13 @@ class AdkComplexHandler:
         except Exception: _run_async(self.session_service.create_session(app_name="iGenda_App", user_id=user_id, session_id=session_id))
         return session_id
 
-    def process_message(self, user_id: str, user_message: str, language: str = 'en', message_type: str = 'text', context_data: str = None) -> dict:
+    def process_message(self, user_id: str, user_message: str, language: str = 'en', message_type: str = 'text', context_data: str = None, user_token: str = "") -> dict:
         start_time = time.time()
         tool_events = []
         try:
             session_id = self._ensure_session(user_id)
             
-            relevant_tools = self._retrieve_tools(user_id, user_message, top_k=8)
+            relevant_tools = self._retrieve_tools(user_id, user_message, top_k=8, user_token=user_token)
             self._build_agent(relevant_tools, user_id, user_message)
 
             if message_type == 'document_text' and context_data:
@@ -660,7 +925,7 @@ class EnhancedAIHandler:
             logging.error(f"Routing failed: {e}")
             return "COMPLEX"
 
-    def process_multimodal_message(self, user_message, message_type='text', context_data=None, database=None, language='en', user_id='yahya'):
+    def process_multimodal_message(self, user_message, message_type='text', context_data=None, database=None, language='en', user_id='yahya', user_token=''):
         if self.use_adk and database:
             intent = self._route_intent(user_message)
             logging.info(f"Router classified intent as: {intent} for user {user_id}")
@@ -690,7 +955,8 @@ class EnhancedAIHandler:
             if not self.heavy_core_agent: self.heavy_core_agent = AdkComplexHandler(database)
             try:
                 return self.heavy_core_agent.process_message(
-                    user_id=user_id, user_message=user_message, language=language, message_type=message_type, context_data=context_data
+                    user_id=user_id, user_message=user_message, language=language,
+                    message_type=message_type, context_data=context_data, user_token=user_token
                 )
             except Exception as e:
                 logging.warning(f"ADK Complex failed, falling back to offline. Error: {e}")
