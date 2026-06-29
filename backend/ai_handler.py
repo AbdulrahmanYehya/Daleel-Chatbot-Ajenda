@@ -682,9 +682,29 @@ class AdkComplexHandler:
 
     def _ensure_session(self, user_id: str):
         session_id = f"{user_id}_complex_session"
-        try: _run_async(self.session_service.get_session(app_name="iGenda_App", user_id=user_id, session_id=session_id))
-        except Exception: _run_async(self.session_service.create_session(app_name="iGenda_App", user_id=user_id, session_id=session_id))
+
+        session = _run_async(
+            self.session_service.get_session(
+                app_name="iGenda_App",
+                user_id=user_id,
+                session_id=session_id,
+            )
+        )
+
+        if session is None:
+            print(f"Creating session {session_id}")
+
+            _run_async(
+                self.session_service.create_session(
+                    app_name="iGenda_App",
+                    user_id=user_id,
+                    session_id=session_id,
+                    state={}
+                )
+            )
+
         return session_id
+    
 
     def process_message(self, user_id: str, user_message: str, language: str = 'en', message_type: str = 'text', context_data: str = None, user_token: str = "") -> dict:
         start_time = time.time()
@@ -759,6 +779,8 @@ class AdkActionHandler:
     def __init__(self, database):
         self.db = database
         self.session_service = InMemorySessionService()
+        print("ComplexHandler", id(self))
+        print("SessionService", id(self.session_service))
 
     def _register_tools(self, user_id: str):
         db = self.db
