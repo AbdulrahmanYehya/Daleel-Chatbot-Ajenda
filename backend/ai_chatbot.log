@@ -7604,3 +7604,592 @@ name
 2026-04-02 17:15:46,799 INFO werkzeug  * Restarting with watchdog (windowsapi)
 2026-04-02 17:19:24,358 INFO werkzeug  * Restarting with watchdog (windowsapi)
 2026-04-02 17:21:02,223 INFO werkzeug  * Restarting with watchdog (windowsapi)
+2026-06-29 14:35:50,111 INFO root SQLite database initialized.
+2026-06-29 14:35:50,111 INFO sentence_transformers.SentenceTransformer Use pytorch device_name: cpu
+2026-06-29 14:35:50,111 INFO sentence_transformers.SentenceTransformer Load pretrained SentenceTransformer: all-MiniLM-L6-v2
+2026-06-29 14:35:54,039 WARNING huggingface_hub.file_download Xet Storage is enabled for this repo, but the 'hf_xet' package is not installed. Falling back to regular HTTP download. For better performance, install the package with: `pip install huggingface_hub[hf_xet]` or `pip install hf_xet`
+2026-06-29 14:38:41,230 INFO root Loaded RAG examples.
+2026-06-29 14:38:41,246 INFO root Loaded RAG index from cache.
+2026-06-29 14:38:41,246 INFO root AI Handler initialized. ADK active: True
+2026-06-29 14:38:41,246 INFO root Database and AI Handler initialized.
+2026-06-29 14:38:41,355 INFO werkzeug [31m[1mWARNING: This is a development server. Do not use it in a production deployment. Use a production WSGI server instead.[0m
+ * Running on http://127.0.0.1:5000
+2026-06-29 14:38:41,355 INFO werkzeug [33mPress CTRL+C to quit[0m
+2026-06-29 14:38:41,386 INFO werkzeug  * Restarting with watchdog (windowsapi)
+2026-06-29 14:39:06,288 INFO root SQLite database initialized.
+2026-06-29 14:39:06,288 INFO sentence_transformers.SentenceTransformer Use pytorch device_name: cpu
+2026-06-29 14:39:06,304 INFO sentence_transformers.SentenceTransformer Load pretrained SentenceTransformer: all-MiniLM-L6-v2
+2026-06-29 14:39:10,988 INFO root Loaded RAG examples.
+2026-06-29 14:39:10,996 INFO root Loaded RAG index from cache.
+2026-06-29 14:39:10,996 INFO root AI Handler initialized. ADK active: True
+2026-06-29 14:39:10,997 INFO root Database and AI Handler initialized.
+2026-06-29 14:39:11,038 WARNING werkzeug  * Debugger is active!
+2026-06-29 14:39:11,057 INFO werkzeug  * Debugger PIN: 223-987-575
+2026-06-29 14:39:11,204 INFO werkzeug 127.0.0.1 - - [29/Jun/2026 14:39:11] "GET / HTTP/1.1" 200 -
+2026-06-29 14:39:11,458 INFO werkzeug 127.0.0.1 - - [29/Jun/2026 14:39:11] "GET /static/style.css HTTP/1.1" 200 -
+2026-06-29 14:39:11,524 INFO werkzeug 127.0.0.1 - - [29/Jun/2026 14:39:11] "GET /static/script.js HTTP/1.1" 200 -
+2026-06-29 14:39:11,754 INFO werkzeug 127.0.0.1 - - [29/Jun/2026 14:39:11] "GET /api/status HTTP/1.1" 200 -
+2026-06-29 14:39:11,754 INFO werkzeug 127.0.0.1 - - [29/Jun/2026 14:39:11] "[33mGET /favicon.ico HTTP/1.1[0m" 404 -
+2026-06-29 14:39:11,774 INFO werkzeug 127.0.0.1 - - [29/Jun/2026 14:39:11] "GET /api/config?lang=en HTTP/1.1" 200 -
+2026-06-29 14:39:11,837 INFO werkzeug 127.0.0.1 - - [29/Jun/2026 14:39:11] "GET /api/welcome HTTP/1.1" 200 -
+2026-06-29 14:39:11,853 INFO werkzeug 127.0.0.1 - - [29/Jun/2026 14:39:11] "GET /api/tasks?include_subtasks=true HTTP/1.1" 200 -
+2026-06-29 14:39:11,870 INFO werkzeug 127.0.0.1 - - [29/Jun/2026 14:39:11] "GET /api/workspaces HTTP/1.1" 200 -
+2026-06-29 14:39:11,870 INFO werkzeug 127.0.0.1 - - [29/Jun/2026 14:39:11] "GET /api/spaces HTTP/1.1" 200 -
+2026-06-29 14:39:11,886 INFO werkzeug 127.0.0.1 - - [29/Jun/2026 14:39:11] "GET /api/notes HTTP/1.1" 200 -
+2026-06-29 14:39:11,903 INFO werkzeug 127.0.0.1 - - [29/Jun/2026 14:39:11] "[35m[1mGET /api/analytics HTTP/1.1[0m" 500 -
+2026-06-29 14:39:42,884 INFO werkzeug 127.0.0.1 - - [29/Jun/2026 14:39:42] "GET /api/status HTTP/1.1" 200 -
+2026-06-29 14:40:12,892 INFO werkzeug 127.0.0.1 - - [29/Jun/2026 14:40:12] "GET /api/status HTTP/1.1" 200 -
+2026-06-29 14:40:35,414 INFO werkzeug 127.0.0.1 - - [29/Jun/2026 14:40:35] "GET /api/smart-analytics HTTP/1.1" 200 -
+2026-06-29 14:40:41,929 INFO werkzeug 127.0.0.1 - - [29/Jun/2026 14:40:41] "GET /api/status HTTP/1.1" 200 -
+2026-06-29 14:41:11,932 INFO werkzeug 127.0.0.1 - - [29/Jun/2026 14:41:11] "GET /api/status HTTP/1.1" 200 -
+2026-06-29 14:41:41,934 INFO werkzeug 127.0.0.1 - - [29/Jun/2026 14:41:41] "GET /api/status HTTP/1.1" 200 -
+2026-06-29 14:42:11,921 INFO werkzeug 127.0.0.1 - - [29/Jun/2026 14:42:11] "GET /api/status HTTP/1.1" 200 -
+2026-06-29 14:42:41,923 INFO werkzeug 127.0.0.1 - - [29/Jun/2026 14:42:41] "GET /api/status HTTP/1.1" 200 -
+2026-06-29 14:43:11,927 INFO werkzeug 127.0.0.1 - - [29/Jun/2026 14:43:11] "GET /api/status HTTP/1.1" 200 -
+2026-06-29 14:43:42,884 INFO werkzeug 127.0.0.1 - - [29/Jun/2026 14:43:42] "GET /api/status HTTP/1.1" 200 -
+2026-06-29 14:44:12,887 INFO werkzeug 127.0.0.1 - - [29/Jun/2026 14:44:12] "GET /api/status HTTP/1.1" 200 -
+2026-06-29 14:44:41,936 INFO werkzeug 127.0.0.1 - - [29/Jun/2026 14:44:41] "GET /api/status HTTP/1.1" 200 -
+2026-06-29 14:45:11,922 INFO werkzeug 127.0.0.1 - - [29/Jun/2026 14:45:11] "GET /api/status HTTP/1.1" 200 -
+2026-06-29 14:45:42,880 INFO werkzeug 127.0.0.1 - - [29/Jun/2026 14:45:42] "GET /api/status HTTP/1.1" 200 -
+2026-06-29 14:46:11,934 INFO werkzeug 127.0.0.1 - - [29/Jun/2026 14:46:11] "GET /api/status HTTP/1.1" 200 -
+2026-06-29 14:46:20,008 INFO werkzeug 127.0.0.1 - - [29/Jun/2026 14:46:20] "PATCH /api/workspaces/18 HTTP/1.1" 200 -
+2026-06-29 14:46:20,025 INFO werkzeug 127.0.0.1 - - [29/Jun/2026 14:46:20] "GET /api/spaces HTTP/1.1" 200 -
+2026-06-29 14:46:20,025 INFO werkzeug 127.0.0.1 - - [29/Jun/2026 14:46:20] "GET /api/workspaces HTTP/1.1" 200 -
+2026-06-29 14:46:23,777 INFO werkzeug 127.0.0.1 - - [29/Jun/2026 14:46:23] "PATCH /api/workspaces/18 HTTP/1.1" 200 -
+2026-06-29 14:46:23,811 INFO werkzeug 127.0.0.1 - - [29/Jun/2026 14:46:23] "GET /api/spaces HTTP/1.1" 200 -
+2026-06-29 14:46:23,811 INFO werkzeug 127.0.0.1 - - [29/Jun/2026 14:46:23] "GET /api/workspaces HTTP/1.1" 200 -
+2026-06-29 14:46:41,932 INFO werkzeug 127.0.0.1 - - [29/Jun/2026 14:46:41] "GET /api/status HTTP/1.1" 200 -
+2026-06-29 14:47:12,883 INFO werkzeug 127.0.0.1 - - [29/Jun/2026 14:47:12] "GET /api/status HTTP/1.1" 200 -
+2026-06-29 14:47:42,875 INFO werkzeug 127.0.0.1 - - [29/Jun/2026 14:47:42] "GET /api/status HTTP/1.1" 200 -
+2026-06-29 14:48:12,882 INFO werkzeug 127.0.0.1 - - [29/Jun/2026 14:48:12] "GET /api/status HTTP/1.1" 200 -
+2026-06-29 14:48:42,888 INFO werkzeug 127.0.0.1 - - [29/Jun/2026 14:48:42] "GET /api/status HTTP/1.1" 200 -
+2026-06-29 14:49:12,896 INFO werkzeug 127.0.0.1 - - [29/Jun/2026 14:49:12] "GET /api/status HTTP/1.1" 200 -
+2026-06-29 14:49:42,877 INFO werkzeug 127.0.0.1 - - [29/Jun/2026 14:49:42] "GET /api/status HTTP/1.1" 200 -
+2026-06-29 14:50:12,876 INFO werkzeug 127.0.0.1 - - [29/Jun/2026 14:50:12] "GET /api/status HTTP/1.1" 200 -
+2026-06-29 14:50:42,893 INFO werkzeug 127.0.0.1 - - [29/Jun/2026 14:50:42] "GET /api/status HTTP/1.1" 200 -
+2026-06-29 14:51:12,882 INFO werkzeug 127.0.0.1 - - [29/Jun/2026 14:51:12] "GET /api/status HTTP/1.1" 200 -
+2026-06-29 14:51:42,889 INFO werkzeug 127.0.0.1 - - [29/Jun/2026 14:51:42] "GET /api/status HTTP/1.1" 200 -
+2026-06-29 14:52:12,886 INFO werkzeug 127.0.0.1 - - [29/Jun/2026 14:52:12] "GET /api/status HTTP/1.1" 200 -
+2026-06-29 14:52:42,885 INFO werkzeug 127.0.0.1 - - [29/Jun/2026 14:52:42] "GET /api/status HTTP/1.1" 200 -
+2026-06-29 14:53:12,878 INFO werkzeug 127.0.0.1 - - [29/Jun/2026 14:53:12] "GET /api/status HTTP/1.1" 200 -
+2026-06-29 14:53:42,887 INFO werkzeug 127.0.0.1 - - [29/Jun/2026 14:53:42] "GET /api/status HTTP/1.1" 200 -
+2026-06-29 14:54:12,884 INFO werkzeug 127.0.0.1 - - [29/Jun/2026 14:54:12] "GET /api/status HTTP/1.1" 200 -
+2026-06-29 14:54:42,884 INFO werkzeug 127.0.0.1 - - [29/Jun/2026 14:54:42] "GET /api/status HTTP/1.1" 200 -
+2026-06-29 14:55:12,882 INFO werkzeug 127.0.0.1 - - [29/Jun/2026 14:55:12] "GET /api/status HTTP/1.1" 200 -
+2026-06-29 14:55:42,889 INFO werkzeug 127.0.0.1 - - [29/Jun/2026 14:55:42] "GET /api/status HTTP/1.1" 200 -
+2026-06-29 14:56:12,892 INFO werkzeug 127.0.0.1 - - [29/Jun/2026 14:56:12] "GET /api/status HTTP/1.1" 200 -
+2026-06-29 14:56:42,883 INFO werkzeug 127.0.0.1 - - [29/Jun/2026 14:56:42] "GET /api/status HTTP/1.1" 200 -
+2026-06-29 14:57:14,880 INFO werkzeug 127.0.0.1 - - [29/Jun/2026 14:57:14] "GET /api/status HTTP/1.1" 200 -
+2026-06-29 14:58:14,885 INFO werkzeug 127.0.0.1 - - [29/Jun/2026 14:58:14] "GET /api/status HTTP/1.1" 200 -
+2026-06-29 14:59:14,882 INFO werkzeug 127.0.0.1 - - [29/Jun/2026 14:59:14] "GET /api/status HTTP/1.1" 200 -
+2026-06-29 14:59:59,148 INFO werkzeug 127.0.0.1 - - [29/Jun/2026 14:59:59] "GET /api/status HTTP/1.1" 200 -
+2026-06-29 15:00:12,884 INFO werkzeug 127.0.0.1 - - [29/Jun/2026 15:00:12] "GET /api/status HTTP/1.1" 200 -
+2026-06-29 15:00:42,888 INFO werkzeug 127.0.0.1 - - [29/Jun/2026 15:00:42] "GET /api/status HTTP/1.1" 200 -
+2026-06-29 15:01:12,891 INFO werkzeug 127.0.0.1 - - [29/Jun/2026 15:01:12] "GET /api/status HTTP/1.1" 200 -
+2026-06-29 15:01:42,875 INFO werkzeug 127.0.0.1 - - [29/Jun/2026 15:01:42] "GET /api/status HTTP/1.1" 200 -
+2026-06-29 15:02:12,881 INFO werkzeug 127.0.0.1 - - [29/Jun/2026 15:02:12] "GET /api/status HTTP/1.1" 200 -
+2026-06-29 15:02:42,882 INFO werkzeug 127.0.0.1 - - [29/Jun/2026 15:02:42] "GET /api/status HTTP/1.1" 200 -
+2026-06-29 15:03:12,886 INFO werkzeug 127.0.0.1 - - [29/Jun/2026 15:03:12] "GET /api/status HTTP/1.1" 200 -
+2026-06-29 15:03:42,888 INFO werkzeug 127.0.0.1 - - [29/Jun/2026 15:03:42] "GET /api/status HTTP/1.1" 200 -
+2026-06-29 15:04:12,892 INFO werkzeug 127.0.0.1 - - [29/Jun/2026 15:04:12] "GET /api/status HTTP/1.1" 200 -
+2026-06-29 15:04:42,879 INFO werkzeug 127.0.0.1 - - [29/Jun/2026 15:04:42] "GET /api/status HTTP/1.1" 200 -
+2026-06-29 15:05:14,881 INFO werkzeug 127.0.0.1 - - [29/Jun/2026 15:05:14] "GET /api/status HTTP/1.1" 200 -
+2026-06-29 15:05:53,134 INFO werkzeug 127.0.0.1 - - [29/Jun/2026 15:05:53] "GET /api/status HTTP/1.1" 200 -
+2026-06-29 15:06:12,888 INFO werkzeug 127.0.0.1 - - [29/Jun/2026 15:06:12] "GET /api/status HTTP/1.1" 200 -
+2026-06-29 15:06:42,875 INFO werkzeug 127.0.0.1 - - [29/Jun/2026 15:06:42] "GET /api/status HTTP/1.1" 200 -
+2026-06-29 15:07:12,876 INFO werkzeug 127.0.0.1 - - [29/Jun/2026 15:07:12] "GET /api/status HTTP/1.1" 200 -
+2026-06-29 15:07:42,880 INFO werkzeug 127.0.0.1 - - [29/Jun/2026 15:07:42] "GET /api/status HTTP/1.1" 200 -
+2026-06-29 15:08:12,881 INFO werkzeug 127.0.0.1 - - [29/Jun/2026 15:08:12] "GET /api/status HTTP/1.1" 200 -
+2026-06-29 15:08:42,887 INFO werkzeug 127.0.0.1 - - [29/Jun/2026 15:08:42] "GET /api/status HTTP/1.1" 200 -
+2026-06-29 15:09:12,889 INFO werkzeug 127.0.0.1 - - [29/Jun/2026 15:09:12] "GET /api/status HTTP/1.1" 200 -
+2026-06-29 15:09:42,890 INFO werkzeug 127.0.0.1 - - [29/Jun/2026 15:09:42] "GET /api/status HTTP/1.1" 200 -
+2026-06-29 15:10:12,879 INFO werkzeug 127.0.0.1 - - [29/Jun/2026 15:10:12] "GET /api/status HTTP/1.1" 200 -
+2026-06-29 15:10:42,881 INFO werkzeug 127.0.0.1 - - [29/Jun/2026 15:10:42] "GET /api/status HTTP/1.1" 200 -
+2026-06-29 15:11:14,884 INFO werkzeug 127.0.0.1 - - [29/Jun/2026 15:11:14] "GET /api/status HTTP/1.1" 200 -
+2026-06-29 15:11:50,672 INFO werkzeug 127.0.0.1 - - [29/Jun/2026 15:11:50] "GET /api/status HTTP/1.1" 200 -
+2026-06-29 15:12:12,889 INFO werkzeug 127.0.0.1 - - [29/Jun/2026 15:12:12] "GET /api/status HTTP/1.1" 200 -
+2026-06-29 15:12:37,629 INFO werkzeug 127.0.0.1 - - [29/Jun/2026 15:12:37] "GET /api/config?lang=ar HTTP/1.1" 200 -
+2026-06-29 15:12:41,925 INFO werkzeug 127.0.0.1 - - [29/Jun/2026 15:12:41] "GET /api/status HTTP/1.1" 200 -
+2026-06-29 15:13:11,928 INFO werkzeug 127.0.0.1 - - [29/Jun/2026 15:13:11] "GET /api/status HTTP/1.1" 200 -
+2026-06-29 15:13:42,879 INFO werkzeug 127.0.0.1 - - [29/Jun/2026 15:13:42] "GET /api/status HTTP/1.1" 200 -
+2026-06-29 15:14:11,930 INFO werkzeug 127.0.0.1 - - [29/Jun/2026 15:14:11] "GET /api/status HTTP/1.1" 200 -
+2026-06-29 15:14:16,231 INFO google_genai.models AFC is enabled with max remote calls: 10.
+2026-06-29 15:14:17,454 INFO httpx HTTP Request: POST https://generativelanguage.googleapis.com/v1beta/models/gemini-2.5-flash:generateContent "HTTP/1.1 200 OK"
+2026-06-29 15:14:17,454 INFO root Router classified intent as: COMPLEX for user yahya
+2026-06-29 15:14:17,470 INFO sentence_transformers.SentenceTransformer Use pytorch device_name: cpu
+2026-06-29 15:14:17,470 INFO sentence_transformers.SentenceTransformer Load pretrained SentenceTransformer: all-MiniLM-L6-v2
+2026-06-29 15:14:21,747 INFO root Loaded RAG examples.
+2026-06-29 15:14:21,747 INFO root Loaded RAG index from cache.
+2026-06-29 15:14:21,765 INFO root Precomputing tool embeddings for Dynamic Retrieval...
+2026-06-29 15:14:22,956 INFO root Dynamically retrieved 8 tools for this prompt.
+2026-06-29 15:14:23,050 INFO werkzeug  * Detected change in 'C:\\Users\\Abdulrahman Yehya\\AppData\\Local\\Programs\\Python\\Python312\\Lib\\threading.py', reloading
+2026-06-29 15:14:23,128 INFO werkzeug  * Detected change in 'C:\\Users\\Abdulrahman Yehya\\AppData\\Local\\Programs\\Python\\Python312\\Lib\\asyncio\\runners.py', reloading
+2026-06-29 15:14:23,175 INFO werkzeug  * Detected change in 'C:\\Users\\Abdulrahman Yehya\\AppData\\Local\\Programs\\Python\\Python312\\Lib\\asyncio\\base_events.py', reloading
+2026-06-29 15:14:23,222 INFO werkzeug 127.0.0.1 - - [29/Jun/2026 15:14:23] "POST /api/chat HTTP/1.1" 200 -
+2026-06-29 15:14:23,250 INFO werkzeug 127.0.0.1 - - [29/Jun/2026 15:14:23] "GET /api/tasks?include_subtasks=true HTTP/1.1" 200 -
+2026-06-29 15:14:23,272 INFO werkzeug 127.0.0.1 - - [29/Jun/2026 15:14:23] "GET /api/spaces HTTP/1.1" 200 -
+2026-06-29 15:14:23,276 INFO werkzeug 127.0.0.1 - - [29/Jun/2026 15:14:23] "GET /api/workspaces HTTP/1.1" 200 -
+2026-06-29 15:14:23,278 INFO werkzeug 127.0.0.1 - - [29/Jun/2026 15:14:23] "GET /api/notes HTTP/1.1" 200 -
+2026-06-29 15:14:23,314 INFO werkzeug 127.0.0.1 - - [29/Jun/2026 15:14:23] "[35m[1mGET /api/analytics HTTP/1.1[0m" 500 -
+2026-06-29 15:14:25,606 INFO werkzeug  * Restarting with watchdog (windowsapi)
+2026-06-29 15:14:51,279 INFO root SQLite database initialized.
+2026-06-29 15:14:51,294 INFO sentence_transformers.SentenceTransformer Use pytorch device_name: cpu
+2026-06-29 15:14:51,294 INFO sentence_transformers.SentenceTransformer Load pretrained SentenceTransformer: all-MiniLM-L6-v2
+2026-06-29 15:14:55,715 INFO root Loaded RAG examples.
+2026-06-29 15:14:55,733 INFO root Loaded RAG index from cache.
+2026-06-29 15:14:55,733 INFO root AI Handler initialized. ADK active: True
+2026-06-29 15:14:55,733 INFO root Database and AI Handler initialized.
+2026-06-29 15:14:55,781 WARNING werkzeug  * Debugger is active!
+2026-06-29 15:14:55,804 INFO werkzeug  * Debugger PIN: 223-987-575
+2026-06-29 15:14:55,865 INFO werkzeug 127.0.0.1 - - [29/Jun/2026 15:14:55] "GET /api/status HTTP/1.1" 200 -
+2026-06-29 15:15:11,923 INFO werkzeug 127.0.0.1 - - [29/Jun/2026 15:15:11] "GET /api/status HTTP/1.1" 200 -
+2026-06-29 15:15:12,605 INFO google_genai.models AFC is enabled with max remote calls: 10.
+2026-06-29 15:15:13,573 INFO httpx HTTP Request: POST https://generativelanguage.googleapis.com/v1beta/models/gemini-2.5-flash:generateContent "HTTP/1.1 200 OK"
+2026-06-29 15:15:13,573 INFO root Router classified intent as: COMPLEX for user yahya
+2026-06-29 15:15:13,590 INFO sentence_transformers.SentenceTransformer Use pytorch device_name: cpu
+2026-06-29 15:15:13,590 INFO sentence_transformers.SentenceTransformer Load pretrained SentenceTransformer: all-MiniLM-L6-v2
+2026-06-29 15:15:17,921 INFO root Loaded RAG examples.
+2026-06-29 15:15:17,938 INFO root Loaded RAG index from cache.
+2026-06-29 15:15:17,938 INFO root Precomputing tool embeddings for Dynamic Retrieval...
+2026-06-29 15:15:18,638 INFO root Dynamically retrieved 8 tools for this prompt.
+2026-06-29 15:15:18,770 INFO werkzeug 127.0.0.1 - - [29/Jun/2026 15:15:18] "POST /api/chat HTTP/1.1" 200 -
+2026-06-29 15:15:18,803 INFO werkzeug 127.0.0.1 - - [29/Jun/2026 15:15:18] "GET /api/tasks?include_subtasks=true HTTP/1.1" 200 -
+2026-06-29 15:15:18,828 INFO werkzeug 127.0.0.1 - - [29/Jun/2026 15:15:18] "GET /api/workspaces HTTP/1.1" 200 -
+2026-06-29 15:15:18,834 INFO werkzeug 127.0.0.1 - - [29/Jun/2026 15:15:18] "GET /api/spaces HTTP/1.1" 200 -
+2026-06-29 15:15:18,836 INFO werkzeug 127.0.0.1 - - [29/Jun/2026 15:15:18] "GET /api/notes HTTP/1.1" 200 -
+2026-06-29 15:15:18,871 INFO werkzeug 127.0.0.1 - - [29/Jun/2026 15:15:18] "[35m[1mGET /api/analytics HTTP/1.1[0m" 500 -
+2026-06-29 15:15:42,880 INFO werkzeug 127.0.0.1 - - [29/Jun/2026 15:15:42] "GET /api/status HTTP/1.1" 200 -
+2026-06-29 15:16:12,882 INFO werkzeug 127.0.0.1 - - [29/Jun/2026 15:16:12] "GET /api/status HTTP/1.1" 200 -
+2026-06-29 15:16:43,677 INFO root SQLite database initialized.
+2026-06-29 15:16:43,692 INFO sentence_transformers.SentenceTransformer Use pytorch device_name: cpu
+2026-06-29 15:16:43,692 INFO sentence_transformers.SentenceTransformer Load pretrained SentenceTransformer: all-MiniLM-L6-v2
+2026-06-29 15:16:48,314 INFO root Loaded RAG examples.
+2026-06-29 15:16:48,332 INFO root Loaded RAG index from cache.
+2026-06-29 15:16:48,332 INFO root AI Handler initialized. ADK active: True
+2026-06-29 15:16:48,332 INFO root Database and AI Handler initialized.
+2026-06-29 15:16:48,397 INFO werkzeug [31m[1mWARNING: This is a development server. Do not use it in a production deployment. Use a production WSGI server instead.[0m
+ * Running on http://127.0.0.1:5000
+2026-06-29 15:16:48,397 INFO werkzeug [33mPress CTRL+C to quit[0m
+2026-06-29 15:16:48,414 INFO werkzeug  * Restarting with watchdog (windowsapi)
+2026-06-29 15:17:10,437 INFO root SQLite database initialized.
+2026-06-29 15:17:10,452 INFO sentence_transformers.SentenceTransformer Use pytorch device_name: cpu
+2026-06-29 15:17:10,454 INFO sentence_transformers.SentenceTransformer Load pretrained SentenceTransformer: all-MiniLM-L6-v2
+2026-06-29 15:17:25,648 INFO root Loaded RAG examples.
+2026-06-29 15:17:25,664 INFO root Loaded RAG index from cache.
+2026-06-29 15:17:25,664 INFO root AI Handler initialized. ADK active: True
+2026-06-29 15:17:25,664 INFO root Database and AI Handler initialized.
+2026-06-29 15:17:25,696 WARNING werkzeug  * Debugger is active!
+2026-06-29 15:17:25,716 INFO werkzeug  * Debugger PIN: 223-987-575
+2026-06-29 15:17:25,763 INFO werkzeug 127.0.0.1 - - [29/Jun/2026 15:17:25] "GET /api/status HTTP/1.1" 200 -
+2026-06-29 15:17:25,787 INFO werkzeug 127.0.0.1 - - [29/Jun/2026 15:17:25] "GET / HTTP/1.1" 200 -
+2026-06-29 15:17:25,964 INFO werkzeug 127.0.0.1 - - [29/Jun/2026 15:17:25] "[36mGET /static/script.js HTTP/1.1[0m" 304 -
+2026-06-29 15:17:25,964 INFO werkzeug 127.0.0.1 - - [29/Jun/2026 15:17:25] "[36mGET /static/style.css HTTP/1.1[0m" 304 -
+2026-06-29 15:17:26,002 INFO werkzeug 127.0.0.1 - - [29/Jun/2026 15:17:26] "GET /api/status HTTP/1.1" 200 -
+2026-06-29 15:17:26,021 INFO werkzeug 127.0.0.1 - - [29/Jun/2026 15:17:26] "GET /api/config?lang=en HTTP/1.1" 200 -
+2026-06-29 15:17:26,037 INFO werkzeug 127.0.0.1 - - [29/Jun/2026 15:17:26] "GET /api/welcome HTTP/1.1" 200 -
+2026-06-29 15:17:26,054 INFO werkzeug 127.0.0.1 - - [29/Jun/2026 15:17:26] "GET /api/tasks?include_subtasks=true HTTP/1.1" 200 -
+2026-06-29 15:17:26,071 INFO werkzeug 127.0.0.1 - - [29/Jun/2026 15:17:26] "GET /api/workspaces HTTP/1.1" 200 -
+2026-06-29 15:17:26,081 INFO werkzeug 127.0.0.1 - - [29/Jun/2026 15:17:26] "GET /api/notes HTTP/1.1" 200 -
+2026-06-29 15:17:26,084 INFO werkzeug 127.0.0.1 - - [29/Jun/2026 15:17:26] "GET /api/spaces HTTP/1.1" 200 -
+2026-06-29 15:17:26,101 INFO werkzeug 127.0.0.1 - - [29/Jun/2026 15:17:26] "GET /api/analytics HTTP/1.1" 200 -
+2026-06-29 15:17:56,122 INFO werkzeug 127.0.0.1 - - [29/Jun/2026 15:17:56] "GET /api/status HTTP/1.1" 200 -
+2026-06-29 15:18:21,547 INFO werkzeug 127.0.0.1 - - [29/Jun/2026 15:18:21] "GET /api/config?lang=ar HTTP/1.1" 200 -
+2026-06-29 15:18:26,114 INFO werkzeug 127.0.0.1 - - [29/Jun/2026 15:18:26] "GET /api/status HTTP/1.1" 200 -
+2026-06-29 15:18:36,032 INFO google_genai.models AFC is enabled with max remote calls: 10.
+2026-06-29 15:18:36,831 INFO httpx HTTP Request: POST https://generativelanguage.googleapis.com/v1beta/models/gemini-2.5-flash:generateContent "HTTP/1.1 200 OK"
+2026-06-29 15:18:36,831 INFO root Router classified intent as: COMPLEX for user yahya
+2026-06-29 15:18:36,847 INFO sentence_transformers.SentenceTransformer Use pytorch device_name: cpu
+2026-06-29 15:18:36,847 INFO sentence_transformers.SentenceTransformer Load pretrained SentenceTransformer: all-MiniLM-L6-v2
+2026-06-29 15:18:41,129 INFO root Loaded RAG examples.
+2026-06-29 15:18:41,129 INFO root Loaded RAG index from cache.
+2026-06-29 15:18:41,146 INFO root Precomputing tool embeddings for Dynamic Retrieval...
+2026-06-29 15:18:41,820 INFO root Dynamically retrieved 8 tools for this prompt.
+2026-06-29 15:18:41,912 INFO werkzeug 127.0.0.1 - - [29/Jun/2026 15:18:41] "POST /api/chat HTTP/1.1" 200 -
+2026-06-29 15:18:41,934 INFO werkzeug 127.0.0.1 - - [29/Jun/2026 15:18:41] "GET /api/tasks?include_subtasks=true HTTP/1.1" 200 -
+2026-06-29 15:18:41,953 INFO werkzeug 127.0.0.1 - - [29/Jun/2026 15:18:41] "GET /api/workspaces HTTP/1.1" 200 -
+2026-06-29 15:18:41,953 INFO werkzeug 127.0.0.1 - - [29/Jun/2026 15:18:41] "GET /api/notes HTTP/1.1" 200 -
+2026-06-29 15:18:41,962 INFO werkzeug 127.0.0.1 - - [29/Jun/2026 15:18:41] "GET /api/spaces HTTP/1.1" 200 -
+2026-06-29 15:18:41,986 INFO werkzeug 127.0.0.1 - - [29/Jun/2026 15:18:41] "GET /api/analytics HTTP/1.1" 200 -
+2026-06-29 15:18:56,887 INFO werkzeug 127.0.0.1 - - [29/Jun/2026 15:18:56] "GET /api/status HTTP/1.1" 200 -
+2026-06-29 15:19:11,894 INFO werkzeug 127.0.0.1 - - [29/Jun/2026 15:19:11] "GET /api/config?lang=en HTTP/1.1" 200 -
+2026-06-29 15:19:16,600 INFO werkzeug 127.0.0.1 - - [29/Jun/2026 15:19:16] "GET / HTTP/1.1" 200 -
+2026-06-29 15:19:16,638 INFO werkzeug 127.0.0.1 - - [29/Jun/2026 15:19:16] "[36mGET /static/style.css HTTP/1.1[0m" 304 -
+2026-06-29 15:19:16,639 INFO werkzeug 127.0.0.1 - - [29/Jun/2026 15:19:16] "[36mGET /static/script.js HTTP/1.1[0m" 304 -
+2026-06-29 15:19:16,672 INFO werkzeug 127.0.0.1 - - [29/Jun/2026 15:19:16] "GET /api/status HTTP/1.1" 200 -
+2026-06-29 15:19:16,686 INFO werkzeug 127.0.0.1 - - [29/Jun/2026 15:19:16] "GET /api/config?lang=en HTTP/1.1" 200 -
+2026-06-29 15:19:16,703 INFO werkzeug 127.0.0.1 - - [29/Jun/2026 15:19:16] "GET /api/welcome HTTP/1.1" 200 -
+2026-06-29 15:19:16,719 INFO werkzeug 127.0.0.1 - - [29/Jun/2026 15:19:16] "GET /api/tasks?include_subtasks=true HTTP/1.1" 200 -
+2026-06-29 15:19:16,731 INFO werkzeug 127.0.0.1 - - [29/Jun/2026 15:19:16] "GET /api/workspaces HTTP/1.1" 200 -
+2026-06-29 15:19:16,746 INFO werkzeug 127.0.0.1 - - [29/Jun/2026 15:19:16] "GET /api/spaces HTTP/1.1" 200 -
+2026-06-29 15:19:16,752 INFO werkzeug 127.0.0.1 - - [29/Jun/2026 15:19:16] "GET /api/notes HTTP/1.1" 200 -
+2026-06-29 15:19:16,769 INFO werkzeug 127.0.0.1 - - [29/Jun/2026 15:19:16] "GET /api/analytics HTTP/1.1" 200 -
+2026-06-29 15:19:46,883 INFO werkzeug 127.0.0.1 - - [29/Jun/2026 15:19:46] "GET /api/status HTTP/1.1" 200 -
+2026-06-29 15:20:16,886 INFO werkzeug 127.0.0.1 - - [29/Jun/2026 15:20:16] "GET /api/status HTTP/1.1" 200 -
+2026-06-29 15:20:46,890 INFO werkzeug 127.0.0.1 - - [29/Jun/2026 15:20:46] "GET /api/status HTTP/1.1" 200 -
+2026-06-29 15:21:16,878 INFO werkzeug 127.0.0.1 - - [29/Jun/2026 15:21:16] "GET /api/status HTTP/1.1" 200 -
+2026-06-29 15:21:46,880 INFO werkzeug 127.0.0.1 - - [29/Jun/2026 15:21:46] "GET /api/status HTTP/1.1" 200 -
+2026-06-29 15:21:54,032 INFO werkzeug 127.0.0.1 - - [29/Jun/2026 15:21:54] "GET /api/config?lang=ar HTTP/1.1" 200 -
+2026-06-29 15:22:05,786 INFO google_genai.models AFC is enabled with max remote calls: 10.
+2026-06-29 15:22:06,853 INFO httpx HTTP Request: POST https://generativelanguage.googleapis.com/v1beta/models/gemini-2.5-flash:generateContent "HTTP/1.1 200 OK"
+2026-06-29 15:22:06,858 INFO root Router classified intent as: ACTION for user yahya
+2026-06-29 15:22:06,886 INFO werkzeug  * Detected change in 'C:\\Users\\Abdulrahman Yehya\\AppData\\Local\\Programs\\Python\\Python312\\Lib\\site-packages\\google\\adk\\runners.py', reloading
+2026-06-29 15:22:06,903 INFO werkzeug 127.0.0.1 - - [29/Jun/2026 15:22:06] "POST /api/chat HTTP/1.1" 200 -
+2026-06-29 15:22:06,919 INFO werkzeug 127.0.0.1 - - [29/Jun/2026 15:22:06] "GET /api/tasks?include_subtasks=true HTTP/1.1" 200 -
+2026-06-29 15:22:06,943 INFO werkzeug 127.0.0.1 - - [29/Jun/2026 15:22:06] "GET /api/workspaces HTTP/1.1" 200 -
+2026-06-29 15:22:06,943 INFO werkzeug 127.0.0.1 - - [29/Jun/2026 15:22:06] "GET /api/spaces HTTP/1.1" 200 -
+2026-06-29 15:22:06,957 INFO werkzeug 127.0.0.1 - - [29/Jun/2026 15:22:06] "GET /api/notes HTTP/1.1" 200 -
+2026-06-29 15:22:06,969 INFO werkzeug 127.0.0.1 - - [29/Jun/2026 15:22:06] "GET /api/analytics HTTP/1.1" 200 -
+2026-06-29 15:22:09,283 INFO werkzeug  * Restarting with watchdog (windowsapi)
+2026-06-29 15:22:35,258 INFO root SQLite database initialized.
+2026-06-29 15:22:35,258 INFO sentence_transformers.SentenceTransformer Use pytorch device_name: cpu
+2026-06-29 15:22:35,258 INFO sentence_transformers.SentenceTransformer Load pretrained SentenceTransformer: all-MiniLM-L6-v2
+2026-06-29 15:22:39,868 INFO root Loaded RAG examples.
+2026-06-29 15:22:39,871 INFO root Loaded RAG index from cache.
+2026-06-29 15:22:39,871 INFO root AI Handler initialized. ADK active: True
+2026-06-29 15:22:39,871 INFO root Database and AI Handler initialized.
+2026-06-29 15:22:39,929 WARNING werkzeug  * Debugger is active!
+2026-06-29 15:22:39,938 INFO werkzeug  * Debugger PIN: 223-987-575
+2026-06-29 15:22:40,003 INFO werkzeug 127.0.0.1 - - [29/Jun/2026 15:22:40] "GET /api/status HTTP/1.1" 200 -
+2026-06-29 15:22:40,026 INFO werkzeug 127.0.0.1 - - [29/Jun/2026 15:22:40] "GET / HTTP/1.1" 200 -
+2026-06-29 15:22:40,215 INFO werkzeug 127.0.0.1 - - [29/Jun/2026 15:22:40] "[36mGET /static/script.js HTTP/1.1[0m" 304 -
+2026-06-29 15:22:40,216 INFO werkzeug 127.0.0.1 - - [29/Jun/2026 15:22:40] "[36mGET /static/style.css HTTP/1.1[0m" 304 -
+2026-06-29 15:22:40,243 INFO werkzeug 127.0.0.1 - - [29/Jun/2026 15:22:40] "GET /api/status HTTP/1.1" 200 -
+2026-06-29 15:22:40,262 INFO werkzeug 127.0.0.1 - - [29/Jun/2026 15:22:40] "GET /api/config?lang=en HTTP/1.1" 200 -
+2026-06-29 15:22:40,286 INFO werkzeug 127.0.0.1 - - [29/Jun/2026 15:22:40] "GET /api/welcome HTTP/1.1" 200 -
+2026-06-29 15:22:40,299 INFO werkzeug 127.0.0.1 - - [29/Jun/2026 15:22:40] "GET /api/tasks?include_subtasks=true HTTP/1.1" 200 -
+2026-06-29 15:22:40,314 INFO werkzeug 127.0.0.1 - - [29/Jun/2026 15:22:40] "GET /api/workspaces HTTP/1.1" 200 -
+2026-06-29 15:22:40,314 INFO werkzeug 127.0.0.1 - - [29/Jun/2026 15:22:40] "GET /api/spaces HTTP/1.1" 200 -
+2026-06-29 15:22:40,325 INFO werkzeug 127.0.0.1 - - [29/Jun/2026 15:22:40] "GET /api/notes HTTP/1.1" 200 -
+2026-06-29 15:22:40,345 INFO werkzeug 127.0.0.1 - - [29/Jun/2026 15:22:40] "GET /api/analytics HTTP/1.1" 200 -
+2026-06-29 15:22:44,481 INFO werkzeug 127.0.0.1 - - [29/Jun/2026 15:22:44] "GET /api/config?lang=ar HTTP/1.1" 200 -
+2026-06-29 15:22:56,722 INFO google_genai.models AFC is enabled with max remote calls: 10.
+2026-06-29 15:22:57,801 INFO httpx HTTP Request: POST https://generativelanguage.googleapis.com/v1beta/models/gemini-2.5-flash:generateContent "HTTP/1.1 200 OK"
+2026-06-29 15:22:57,816 INFO root Router classified intent as: ACTION for user yahya
+2026-06-29 15:22:57,863 INFO werkzeug 127.0.0.1 - - [29/Jun/2026 15:22:57] "POST /api/chat HTTP/1.1" 200 -
+2026-06-29 15:22:57,863 INFO werkzeug 127.0.0.1 - - [29/Jun/2026 15:22:57] "GET /api/tasks?include_subtasks=true HTTP/1.1" 200 -
+2026-06-29 15:22:57,883 INFO werkzeug 127.0.0.1 - - [29/Jun/2026 15:22:57] "GET /api/workspaces HTTP/1.1" 200 -
+2026-06-29 15:22:57,883 INFO werkzeug 127.0.0.1 - - [29/Jun/2026 15:22:57] "GET /api/notes HTTP/1.1" 200 -
+2026-06-29 15:22:57,897 INFO werkzeug 127.0.0.1 - - [29/Jun/2026 15:22:57] "GET /api/spaces HTTP/1.1" 200 -
+2026-06-29 15:22:57,912 INFO werkzeug 127.0.0.1 - - [29/Jun/2026 15:22:57] "GET /api/analytics HTTP/1.1" 200 -
+2026-06-29 15:23:05,740 INFO werkzeug 127.0.0.1 - - [29/Jun/2026 15:23:05] "GET /api/config?lang=en HTTP/1.1" 200 -
+2026-06-29 15:23:08,175 INFO werkzeug 127.0.0.1 - - [29/Jun/2026 15:23:08] "GET / HTTP/1.1" 200 -
+2026-06-29 15:23:08,212 INFO werkzeug 127.0.0.1 - - [29/Jun/2026 15:23:08] "[36mGET /static/style.css HTTP/1.1[0m" 304 -
+2026-06-29 15:23:08,212 INFO werkzeug 127.0.0.1 - - [29/Jun/2026 15:23:08] "[36mGET /static/script.js HTTP/1.1[0m" 304 -
+2026-06-29 15:23:08,265 INFO werkzeug 127.0.0.1 - - [29/Jun/2026 15:23:08] "GET /api/status HTTP/1.1" 200 -
+2026-06-29 15:23:08,282 INFO werkzeug 127.0.0.1 - - [29/Jun/2026 15:23:08] "GET /api/config?lang=en HTTP/1.1" 200 -
+2026-06-29 15:23:08,297 INFO werkzeug 127.0.0.1 - - [29/Jun/2026 15:23:08] "GET /api/welcome HTTP/1.1" 200 -
+2026-06-29 15:23:08,312 INFO werkzeug 127.0.0.1 - - [29/Jun/2026 15:23:08] "GET /api/tasks?include_subtasks=true HTTP/1.1" 200 -
+2026-06-29 15:23:08,329 INFO werkzeug 127.0.0.1 - - [29/Jun/2026 15:23:08] "GET /api/workspaces HTTP/1.1" 200 -
+2026-06-29 15:23:08,329 INFO werkzeug 127.0.0.1 - - [29/Jun/2026 15:23:08] "GET /api/spaces HTTP/1.1" 200 -
+2026-06-29 15:23:08,344 INFO werkzeug 127.0.0.1 - - [29/Jun/2026 15:23:08] "GET /api/notes HTTP/1.1" 200 -
+2026-06-29 15:23:08,344 INFO werkzeug 127.0.0.1 - - [29/Jun/2026 15:23:08] "GET /api/analytics HTTP/1.1" 200 -
+2026-06-29 15:23:33,586 INFO werkzeug  * Detected change in 'C:\\Aijenda\\Daleel\\Daleel-Chatbot-Ajenda\\backend\\ai_handler.py', reloading
+2026-06-29 15:23:35,863 INFO werkzeug  * Restarting with watchdog (windowsapi)
+2026-06-29 15:23:58,729 INFO root SQLite database initialized.
+2026-06-29 15:23:58,745 INFO sentence_transformers.SentenceTransformer Use pytorch device_name: cpu
+2026-06-29 15:23:58,745 INFO sentence_transformers.SentenceTransformer Load pretrained SentenceTransformer: all-MiniLM-L6-v2
+2026-06-29 15:24:03,511 INFO root Loaded RAG examples.
+2026-06-29 15:24:03,526 INFO root Loaded RAG index from cache.
+2026-06-29 15:24:03,526 INFO root AI Handler initialized. ADK active: True
+2026-06-29 15:24:03,526 INFO root Database and AI Handler initialized.
+2026-06-29 15:24:03,558 WARNING werkzeug  * Debugger is active!
+2026-06-29 15:24:03,573 INFO werkzeug  * Debugger PIN: 223-987-575
+2026-06-29 15:24:03,620 INFO werkzeug 127.0.0.1 - - [29/Jun/2026 15:24:03] "GET /api/status HTTP/1.1" 200 -
+2026-06-29 15:24:08,887 INFO werkzeug 127.0.0.1 - - [29/Jun/2026 15:24:08] "GET /api/status HTTP/1.1" 200 -
+2026-06-29 15:24:38,367 INFO werkzeug 127.0.0.1 - - [29/Jun/2026 15:24:38] "GET /api/status HTTP/1.1" 200 -
+2026-06-29 15:25:08,368 INFO werkzeug 127.0.0.1 - - [29/Jun/2026 15:25:08] "GET /api/status HTTP/1.1" 200 -
+2026-06-29 15:25:19,398 INFO google_genai.models AFC is enabled with max remote calls: 10.
+2026-06-29 15:25:20,448 INFO httpx HTTP Request: POST https://generativelanguage.googleapis.com/v1beta/models/gemini-2.5-flash:generateContent "HTTP/1.1 200 OK"
+2026-06-29 15:25:20,448 INFO root Router classified intent as: COMPLEX for user yahya
+2026-06-29 15:25:20,464 INFO sentence_transformers.SentenceTransformer Use pytorch device_name: cpu
+2026-06-29 15:25:20,464 INFO sentence_transformers.SentenceTransformer Load pretrained SentenceTransformer: all-MiniLM-L6-v2
+2026-06-29 15:25:24,737 INFO root Loaded RAG examples.
+2026-06-29 15:25:24,746 INFO root Loaded RAG index from cache.
+2026-06-29 15:25:24,746 INFO root Precomputing tool embeddings for Dynamic Retrieval...
+2026-06-29 15:25:25,345 INFO root Dynamically retrieved 8 tools for this prompt.
+2026-06-29 15:25:25,460 INFO werkzeug 127.0.0.1 - - [29/Jun/2026 15:25:25] "POST /api/chat HTTP/1.1" 200 -
+2026-06-29 15:25:25,482 INFO werkzeug 127.0.0.1 - - [29/Jun/2026 15:25:25] "GET /api/tasks?include_subtasks=true HTTP/1.1" 200 -
+2026-06-29 15:25:25,499 INFO werkzeug 127.0.0.1 - - [29/Jun/2026 15:25:25] "GET /api/workspaces HTTP/1.1" 200 -
+2026-06-29 15:25:25,499 INFO werkzeug 127.0.0.1 - - [29/Jun/2026 15:25:25] "GET /api/spaces HTTP/1.1" 200 -
+2026-06-29 15:25:25,515 INFO werkzeug 127.0.0.1 - - [29/Jun/2026 15:25:25] "GET /api/notes HTTP/1.1" 200 -
+2026-06-29 15:25:25,532 INFO werkzeug 127.0.0.1 - - [29/Jun/2026 15:25:25] "GET /api/analytics HTTP/1.1" 200 -
+2026-06-29 15:25:38,367 INFO werkzeug 127.0.0.1 - - [29/Jun/2026 15:25:38] "GET /api/status HTTP/1.1" 200 -
+2026-06-29 15:26:08,876 INFO werkzeug 127.0.0.1 - - [29/Jun/2026 15:26:08] "GET /api/status HTTP/1.1" 200 -
+2026-06-29 15:26:38,882 INFO werkzeug 127.0.0.1 - - [29/Jun/2026 15:26:38] "GET /api/status HTTP/1.1" 200 -
+2026-06-29 15:27:14,886 INFO werkzeug 127.0.0.1 - - [29/Jun/2026 15:27:14] "GET /api/status HTTP/1.1" 200 -
+2026-06-29 15:27:15,500 INFO werkzeug  * Detected change in 'C:\\Users\\Abdulrahman Yehya\\AppData\\Local\\Programs\\Python\\Python312\\Lib\\site-packages\\google\\adk\\sessions\\state.py', reloading
+2026-06-29 15:27:15,547 INFO werkzeug  * Detected change in 'C:\\Users\\Abdulrahman Yehya\\AppData\\Local\\Programs\\Python\\Python312\\Lib\\site-packages\\google\\adk\\sessions\\vertex_ai_session_service.py', reloading
+2026-06-29 15:27:18,213 INFO werkzeug  * Restarting with watchdog (windowsapi)
+2026-06-29 15:27:45,155 INFO root SQLite database initialized.
+2026-06-29 15:27:45,171 INFO sentence_transformers.SentenceTransformer Use pytorch device_name: cpu
+2026-06-29 15:27:45,172 INFO sentence_transformers.SentenceTransformer Load pretrained SentenceTransformer: all-MiniLM-L6-v2
+2026-06-29 15:27:50,454 INFO root Loaded RAG examples.
+2026-06-29 15:27:50,463 INFO root Loaded RAG index from cache.
+2026-06-29 15:27:50,465 INFO root AI Handler initialized. ADK active: True
+2026-06-29 15:27:50,466 INFO root Database and AI Handler initialized.
+2026-06-29 15:27:50,517 WARNING werkzeug  * Debugger is active!
+2026-06-29 15:27:50,531 INFO werkzeug  * Debugger PIN: 223-987-575
+2026-06-29 15:28:14,875 INFO werkzeug 127.0.0.1 - - [29/Jun/2026 15:28:14] "GET /api/status HTTP/1.1" 200 -
+2026-06-29 15:29:14,883 INFO werkzeug 127.0.0.1 - - [29/Jun/2026 15:29:14] "GET /api/status HTTP/1.1" 200 -
+2026-06-29 15:30:14,885 INFO werkzeug 127.0.0.1 - - [29/Jun/2026 15:30:14] "GET /api/status HTTP/1.1" 200 -
+2026-06-29 15:31:14,889 INFO werkzeug 127.0.0.1 - - [29/Jun/2026 15:31:14] "GET /api/status HTTP/1.1" 200 -
+2026-06-29 15:32:14,237 INFO werkzeug  * Detected change in 'C:\\Aijenda\\Daleel\\Daleel-Chatbot-Ajenda\\backend\\ai_handler.py', reloading
+2026-06-29 15:32:14,238 INFO werkzeug  * Detected change in 'C:\\Aijenda\\Daleel\\Daleel-Chatbot-Ajenda\\backend\\ai_handler.py', reloading
+2026-06-29 15:32:14,886 INFO werkzeug 127.0.0.1 - - [29/Jun/2026 15:32:14] "GET /api/status HTTP/1.1" 200 -
+2026-06-29 15:32:16,810 INFO werkzeug  * Restarting with watchdog (windowsapi)
+2026-06-29 15:32:42,428 INFO root SQLite database initialized.
+2026-06-29 15:32:42,428 INFO sentence_transformers.SentenceTransformer Use pytorch device_name: cpu
+2026-06-29 15:32:42,428 INFO sentence_transformers.SentenceTransformer Load pretrained SentenceTransformer: all-MiniLM-L6-v2
+2026-06-29 15:32:47,513 INFO root Loaded RAG examples.
+2026-06-29 15:32:47,514 INFO root Loaded RAG index from cache.
+2026-06-29 15:32:47,514 INFO root AI Handler initialized. ADK active: True
+2026-06-29 15:32:47,514 INFO root Database and AI Handler initialized.
+2026-06-29 15:32:47,567 WARNING werkzeug  * Debugger is active!
+2026-06-29 15:32:47,579 INFO werkzeug  * Debugger PIN: 223-987-575
+2026-06-29 15:32:47,627 INFO werkzeug 127.0.0.1 - - [29/Jun/2026 15:32:47] "GET /api/status HTTP/1.1" 200 -
+2026-06-29 15:33:08,381 INFO werkzeug 127.0.0.1 - - [29/Jun/2026 15:33:08] "GET /api/status HTTP/1.1" 200 -
+2026-06-29 15:33:09,225 INFO werkzeug 127.0.0.1 - - [29/Jun/2026 15:33:09] "GET / HTTP/1.1" 200 -
+2026-06-29 15:33:09,419 INFO werkzeug 127.0.0.1 - - [29/Jun/2026 15:33:09] "[36mGET /static/style.css HTTP/1.1[0m" 304 -
+2026-06-29 15:33:09,419 INFO werkzeug 127.0.0.1 - - [29/Jun/2026 15:33:09] "[36mGET /static/script.js HTTP/1.1[0m" 304 -
+2026-06-29 15:33:09,442 INFO werkzeug 127.0.0.1 - - [29/Jun/2026 15:33:09] "GET /api/status HTTP/1.1" 200 -
+2026-06-29 15:33:09,452 INFO werkzeug 127.0.0.1 - - [29/Jun/2026 15:33:09] "GET /api/config?lang=en HTTP/1.1" 200 -
+2026-06-29 15:33:09,491 INFO werkzeug 127.0.0.1 - - [29/Jun/2026 15:33:09] "GET /api/welcome HTTP/1.1" 200 -
+2026-06-29 15:33:09,506 INFO werkzeug 127.0.0.1 - - [29/Jun/2026 15:33:09] "GET /api/tasks?include_subtasks=true HTTP/1.1" 200 -
+2026-06-29 15:33:09,524 INFO werkzeug 127.0.0.1 - - [29/Jun/2026 15:33:09] "GET /api/workspaces HTTP/1.1" 200 -
+2026-06-29 15:33:09,535 INFO werkzeug 127.0.0.1 - - [29/Jun/2026 15:33:09] "GET /api/spaces HTTP/1.1" 200 -
+2026-06-29 15:33:09,535 INFO werkzeug 127.0.0.1 - - [29/Jun/2026 15:33:09] "GET /api/notes HTTP/1.1" 200 -
+2026-06-29 15:33:09,569 INFO werkzeug 127.0.0.1 - - [29/Jun/2026 15:33:09] "GET /api/analytics HTTP/1.1" 200 -
+2026-06-29 15:33:15,900 INFO google_genai.models AFC is enabled with max remote calls: 10.
+2026-06-29 15:33:19,548 INFO httpx HTTP Request: POST https://generativelanguage.googleapis.com/v1beta/models/gemini-2.5-flash:generateContent "HTTP/1.1 200 OK"
+2026-06-29 15:33:19,565 INFO root Router classified intent as: COMPLEX for user yahya
+2026-06-29 15:33:19,565 INFO sentence_transformers.SentenceTransformer Use pytorch device_name: cpu
+2026-06-29 15:33:19,581 INFO sentence_transformers.SentenceTransformer Load pretrained SentenceTransformer: all-MiniLM-L6-v2
+2026-06-29 15:33:31,375 INFO root Loaded RAG examples.
+2026-06-29 15:33:31,375 INFO root Loaded RAG index from cache.
+2026-06-29 15:33:31,375 INFO root Precomputing tool embeddings for Dynamic Retrieval...
+2026-06-29 15:33:32,592 INFO root Dynamically retrieved 8 tools for this prompt.
+2026-06-29 15:33:32,692 INFO werkzeug 127.0.0.1 - - [29/Jun/2026 15:33:32] "POST /api/chat HTTP/1.1" 200 -
+2026-06-29 15:33:32,716 INFO werkzeug 127.0.0.1 - - [29/Jun/2026 15:33:32] "GET /api/tasks?include_subtasks=true HTTP/1.1" 200 -
+2026-06-29 15:33:32,726 INFO werkzeug 127.0.0.1 - - [29/Jun/2026 15:33:32] "GET /api/workspaces HTTP/1.1" 200 -
+2026-06-29 15:33:32,748 INFO werkzeug 127.0.0.1 - - [29/Jun/2026 15:33:32] "GET /api/notes HTTP/1.1" 200 -
+2026-06-29 15:33:32,748 INFO werkzeug 127.0.0.1 - - [29/Jun/2026 15:33:32] "GET /api/spaces HTTP/1.1" 200 -
+2026-06-29 15:33:32,764 INFO werkzeug 127.0.0.1 - - [29/Jun/2026 15:33:32] "GET /api/analytics HTTP/1.1" 200 -
+2026-06-29 15:33:39,592 INFO werkzeug 127.0.0.1 - - [29/Jun/2026 15:33:39] "GET /api/status HTTP/1.1" 200 -
+2026-06-29 15:33:52,965 INFO werkzeug  * Detected change in 'C:\\Aijenda\\Daleel\\Daleel-Chatbot-Ajenda\\backend\\ai_handler.py', reloading
+2026-06-29 15:33:52,965 INFO werkzeug  * Detected change in 'C:\\Aijenda\\Daleel\\Daleel-Chatbot-Ajenda\\backend\\ai_handler.py', reloading
+2026-06-29 15:33:55,031 INFO werkzeug  * Restarting with watchdog (windowsapi)
+2026-06-29 15:34:18,262 INFO root SQLite database initialized.
+2026-06-29 15:34:18,268 INFO sentence_transformers.SentenceTransformer Use pytorch device_name: cpu
+2026-06-29 15:34:18,269 INFO sentence_transformers.SentenceTransformer Load pretrained SentenceTransformer: all-MiniLM-L6-v2
+2026-06-29 15:34:24,086 INFO root Loaded RAG examples.
+2026-06-29 15:34:24,086 INFO root Loaded RAG index from cache.
+2026-06-29 15:34:24,086 INFO root AI Handler initialized. ADK active: True
+2026-06-29 15:34:24,086 INFO root Database and AI Handler initialized.
+2026-06-29 15:34:24,152 WARNING werkzeug  * Debugger is active!
+2026-06-29 15:34:24,170 INFO werkzeug  * Debugger PIN: 223-987-575
+2026-06-29 15:34:24,236 INFO werkzeug 127.0.0.1 - - [29/Jun/2026 15:34:24] "GET /api/status HTTP/1.1" 200 -
+2026-06-29 15:34:40,088 INFO werkzeug 127.0.0.1 - - [29/Jun/2026 15:34:40] "GET /api/status HTTP/1.1" 200 -
+2026-06-29 15:35:09,884 INFO werkzeug 127.0.0.1 - - [29/Jun/2026 15:35:09] "GET /api/status HTTP/1.1" 200 -
+2026-06-29 15:35:39,875 INFO werkzeug 127.0.0.1 - - [29/Jun/2026 15:35:39] "GET /api/status HTTP/1.1" 200 -
+2026-06-29 15:36:09,874 INFO werkzeug 127.0.0.1 - - [29/Jun/2026 15:36:09] "GET /api/status HTTP/1.1" 200 -
+2026-06-29 15:36:44,821 INFO werkzeug  * Detected change in 'C:\\Aijenda\\Daleel\\Daleel-Chatbot-Ajenda\\backend\\ai_handler.py', reloading
+2026-06-29 15:36:44,838 INFO werkzeug  * Detected change in 'C:\\Aijenda\\Daleel\\Daleel-Chatbot-Ajenda\\backend\\ai_handler.py', reloading
+2026-06-29 15:36:46,991 INFO werkzeug  * Restarting with watchdog (windowsapi)
+2026-06-29 15:37:18,585 INFO root SQLite database initialized.
+2026-06-29 15:37:18,593 INFO sentence_transformers.SentenceTransformer Use pytorch device_name: cpu
+2026-06-29 15:37:18,594 INFO sentence_transformers.SentenceTransformer Load pretrained SentenceTransformer: all-MiniLM-L6-v2
+2026-06-29 15:37:23,750 INFO root Loaded RAG examples.
+2026-06-29 15:37:23,756 INFO root Loaded RAG index from cache.
+2026-06-29 15:37:23,756 INFO root AI Handler initialized. ADK active: True
+2026-06-29 15:37:23,756 INFO root Database and AI Handler initialized.
+2026-06-29 15:37:23,818 WARNING werkzeug  * Debugger is active!
+2026-06-29 15:37:23,825 INFO werkzeug  * Debugger PIN: 223-987-575
+2026-06-29 15:37:23,888 INFO werkzeug 127.0.0.1 - - [29/Jun/2026 15:37:23] "GET /api/status HTTP/1.1" 200 -
+2026-06-29 15:37:29,759 INFO werkzeug  * Detected change in 'C:\\Aijenda\\Daleel\\Daleel-Chatbot-Ajenda\\backend\\ai_handler.py', reloading
+2026-06-29 15:37:29,761 INFO werkzeug  * Detected change in 'C:\\Aijenda\\Daleel\\Daleel-Chatbot-Ajenda\\backend\\ai_handler.py', reloading
+2026-06-29 15:37:31,620 INFO werkzeug  * Restarting with watchdog (windowsapi)
+2026-06-29 15:38:06,161 INFO root SQLite database initialized.
+2026-06-29 15:38:06,176 INFO sentence_transformers.SentenceTransformer Use pytorch device_name: cpu
+2026-06-29 15:38:06,176 INFO sentence_transformers.SentenceTransformer Load pretrained SentenceTransformer: all-MiniLM-L6-v2
+2026-06-29 15:38:14,319 INFO root Loaded RAG examples.
+2026-06-29 15:38:14,334 INFO root Loaded RAG index from cache.
+2026-06-29 15:38:14,334 INFO root AI Handler initialized. ADK active: True
+2026-06-29 15:38:14,334 INFO root Database and AI Handler initialized.
+2026-06-29 15:38:14,397 INFO werkzeug [31m[1mWARNING: This is a development server. Do not use it in a production deployment. Use a production WSGI server instead.[0m
+ * Running on http://127.0.0.1:5000
+2026-06-29 15:38:14,397 INFO werkzeug [33mPress CTRL+C to quit[0m
+2026-06-29 15:38:14,428 INFO werkzeug  * Restarting with watchdog (windowsapi)
+2026-06-29 15:38:35,920 INFO root SQLite database initialized.
+2026-06-29 15:38:35,920 INFO sentence_transformers.SentenceTransformer Use pytorch device_name: cpu
+2026-06-29 15:38:35,920 INFO sentence_transformers.SentenceTransformer Load pretrained SentenceTransformer: all-MiniLM-L6-v2
+2026-06-29 15:38:40,449 INFO root Loaded RAG examples.
+2026-06-29 15:38:40,453 INFO root Loaded RAG index from cache.
+2026-06-29 15:38:40,453 INFO root AI Handler initialized. ADK active: True
+2026-06-29 15:38:40,453 INFO root Database and AI Handler initialized.
+2026-06-29 15:38:40,512 WARNING werkzeug  * Debugger is active!
+2026-06-29 15:38:40,520 INFO werkzeug  * Debugger PIN: 223-987-575
+2026-06-29 15:38:40,583 INFO werkzeug 127.0.0.1 - - [29/Jun/2026 15:38:40] "GET /api/status HTTP/1.1" 200 -
+2026-06-29 15:38:40,606 INFO werkzeug 127.0.0.1 - - [29/Jun/2026 15:38:40] "GET / HTTP/1.1" 200 -
+2026-06-29 15:38:40,812 INFO werkzeug 127.0.0.1 - - [29/Jun/2026 15:38:40] "[36mGET /static/style.css HTTP/1.1[0m" 304 -
+2026-06-29 15:38:40,813 INFO werkzeug 127.0.0.1 - - [29/Jun/2026 15:38:40] "[36mGET /static/script.js HTTP/1.1[0m" 304 -
+2026-06-29 15:38:40,844 INFO werkzeug 127.0.0.1 - - [29/Jun/2026 15:38:40] "GET /api/status HTTP/1.1" 200 -
+2026-06-29 15:38:40,874 INFO werkzeug 127.0.0.1 - - [29/Jun/2026 15:38:40] "GET /api/config?lang=en HTTP/1.1" 200 -
+2026-06-29 15:38:40,907 INFO werkzeug 127.0.0.1 - - [29/Jun/2026 15:38:40] "GET /api/welcome HTTP/1.1" 200 -
+2026-06-29 15:38:40,927 INFO werkzeug 127.0.0.1 - - [29/Jun/2026 15:38:40] "GET /api/tasks?include_subtasks=true HTTP/1.1" 200 -
+2026-06-29 15:38:40,946 INFO werkzeug 127.0.0.1 - - [29/Jun/2026 15:38:40] "GET /api/spaces HTTP/1.1" 200 -
+2026-06-29 15:38:40,947 INFO werkzeug 127.0.0.1 - - [29/Jun/2026 15:38:40] "GET /api/workspaces HTTP/1.1" 200 -
+2026-06-29 15:38:40,958 INFO werkzeug 127.0.0.1 - - [29/Jun/2026 15:38:40] "GET /api/notes HTTP/1.1" 200 -
+2026-06-29 15:38:40,975 INFO werkzeug 127.0.0.1 - - [29/Jun/2026 15:38:40] "GET /api/analytics HTTP/1.1" 200 -
+2026-06-29 15:38:48,167 INFO google_genai.models AFC is enabled with max remote calls: 10.
+2026-06-29 15:38:49,215 INFO httpx HTTP Request: POST https://generativelanguage.googleapis.com/v1beta/models/gemini-2.5-flash:generateContent "HTTP/1.1 200 OK"
+2026-06-29 15:38:49,232 INFO root Router classified intent as: COMPLEX for user yahya
+2026-06-29 15:38:49,232 INFO sentence_transformers.SentenceTransformer Use pytorch device_name: cpu
+2026-06-29 15:38:49,232 INFO sentence_transformers.SentenceTransformer Load pretrained SentenceTransformer: all-MiniLM-L6-v2
+2026-06-29 15:38:55,295 INFO root Loaded RAG examples.
+2026-06-29 15:38:55,295 INFO root Loaded RAG index from cache.
+2026-06-29 15:38:55,295 INFO root Precomputing tool embeddings for Dynamic Retrieval...
+2026-06-29 15:38:56,646 INFO root Dynamically retrieved 8 tools for this prompt.
+2026-06-29 15:38:56,762 INFO werkzeug 127.0.0.1 - - [29/Jun/2026 15:38:56] "POST /api/chat HTTP/1.1" 200 -
+2026-06-29 15:38:56,783 INFO werkzeug 127.0.0.1 - - [29/Jun/2026 15:38:56] "GET /api/tasks?include_subtasks=true HTTP/1.1" 200 -
+2026-06-29 15:38:56,797 INFO werkzeug 127.0.0.1 - - [29/Jun/2026 15:38:56] "GET /api/workspaces HTTP/1.1" 200 -
+2026-06-29 15:38:56,798 INFO werkzeug 127.0.0.1 - - [29/Jun/2026 15:38:56] "GET /api/spaces HTTP/1.1" 200 -
+2026-06-29 15:38:56,811 INFO werkzeug 127.0.0.1 - - [29/Jun/2026 15:38:56] "GET /api/notes HTTP/1.1" 200 -
+2026-06-29 15:38:56,811 INFO werkzeug 127.0.0.1 - - [29/Jun/2026 15:38:56] "GET /api/analytics HTTP/1.1" 200 -
+2026-06-29 15:39:11,890 INFO werkzeug 127.0.0.1 - - [29/Jun/2026 15:39:11] "GET /api/status HTTP/1.1" 200 -
+2026-06-29 15:39:41,875 INFO werkzeug 127.0.0.1 - - [29/Jun/2026 15:39:41] "GET /api/status HTTP/1.1" 200 -
+2026-06-29 15:40:11,885 INFO werkzeug 127.0.0.1 - - [29/Jun/2026 15:40:11] "GET /api/status HTTP/1.1" 200 -
+2026-06-29 15:40:41,884 INFO werkzeug 127.0.0.1 - - [29/Jun/2026 15:40:41] "GET /api/status HTTP/1.1" 200 -
+2026-06-29 15:40:50,993 INFO werkzeug  * Detected change in 'C:\\Aijenda\\Daleel\\Daleel-Chatbot-Ajenda\\backend\\ai_handler.py', reloading
+2026-06-29 15:40:50,993 INFO werkzeug  * Detected change in 'C:\\Aijenda\\Daleel\\Daleel-Chatbot-Ajenda\\backend\\ai_handler.py', reloading
+2026-06-29 15:40:53,978 INFO werkzeug  * Restarting with watchdog (windowsapi)
+2026-06-29 15:41:17,948 INFO root SQLite database initialized.
+2026-06-29 15:41:17,963 INFO sentence_transformers.SentenceTransformer Use pytorch device_name: cpu
+2026-06-29 15:41:17,963 INFO sentence_transformers.SentenceTransformer Load pretrained SentenceTransformer: all-MiniLM-L6-v2
+2026-06-29 15:41:26,544 INFO root Loaded RAG examples.
+2026-06-29 15:41:26,562 INFO root Loaded RAG index from cache.
+2026-06-29 15:41:26,562 INFO root AI Handler initialized. ADK active: True
+2026-06-29 15:41:26,562 INFO root Database and AI Handler initialized.
+2026-06-29 15:41:26,616 WARNING werkzeug  * Debugger is active!
+2026-06-29 15:41:26,628 INFO werkzeug  * Debugger PIN: 223-987-575
+2026-06-29 15:41:26,661 INFO werkzeug 127.0.0.1 - - [29/Jun/2026 15:41:26] "GET /api/status HTTP/1.1" 200 -
+2026-06-29 15:41:28,429 INFO werkzeug 127.0.0.1 - - [29/Jun/2026 15:41:28] "GET / HTTP/1.1" 200 -
+2026-06-29 15:41:28,592 INFO werkzeug 127.0.0.1 - - [29/Jun/2026 15:41:28] "[36mGET /static/style.css HTTP/1.1[0m" 304 -
+2026-06-29 15:41:28,592 INFO werkzeug 127.0.0.1 - - [29/Jun/2026 15:41:28] "[36mGET /static/script.js HTTP/1.1[0m" 304 -
+2026-06-29 15:41:28,620 INFO werkzeug 127.0.0.1 - - [29/Jun/2026 15:41:28] "GET /api/status HTTP/1.1" 200 -
+2026-06-29 15:41:28,653 INFO werkzeug 127.0.0.1 - - [29/Jun/2026 15:41:28] "GET /api/config?lang=en HTTP/1.1" 200 -
+2026-06-29 15:41:28,679 INFO werkzeug 127.0.0.1 - - [29/Jun/2026 15:41:28] "GET /api/welcome HTTP/1.1" 200 -
+2026-06-29 15:41:28,693 INFO werkzeug 127.0.0.1 - - [29/Jun/2026 15:41:28] "GET /api/tasks?include_subtasks=true HTTP/1.1" 200 -
+2026-06-29 15:41:28,709 INFO werkzeug 127.0.0.1 - - [29/Jun/2026 15:41:28] "GET /api/workspaces HTTP/1.1" 200 -
+2026-06-29 15:41:28,709 INFO werkzeug 127.0.0.1 - - [29/Jun/2026 15:41:28] "GET /api/spaces HTTP/1.1" 200 -
+2026-06-29 15:41:28,726 INFO werkzeug 127.0.0.1 - - [29/Jun/2026 15:41:28] "GET /api/notes HTTP/1.1" 200 -
+2026-06-29 15:41:28,726 INFO werkzeug 127.0.0.1 - - [29/Jun/2026 15:41:28] "GET /api/analytics HTTP/1.1" 200 -
+2026-06-29 15:41:33,690 INFO google_genai.models AFC is enabled with max remote calls: 10.
+2026-06-29 15:41:36,239 INFO httpx HTTP Request: POST https://generativelanguage.googleapis.com/v1beta/models/gemini-2.5-flash:generateContent "HTTP/1.1 200 OK"
+2026-06-29 15:41:36,239 INFO root Router classified intent as: COMPLEX for user yahya
+2026-06-29 15:41:36,258 INFO sentence_transformers.SentenceTransformer Use pytorch device_name: cpu
+2026-06-29 15:41:36,258 INFO sentence_transformers.SentenceTransformer Load pretrained SentenceTransformer: all-MiniLM-L6-v2
+2026-06-29 15:41:46,200 INFO root Loaded RAG examples.
+2026-06-29 15:41:46,201 INFO root Loaded RAG index from cache.
+2026-06-29 15:41:46,201 INFO root Precomputing tool embeddings for Dynamic Retrieval...
+2026-06-29 15:41:46,785 INFO root Dynamically retrieved 8 tools for this prompt.
+2026-06-29 15:41:46,968 INFO werkzeug 127.0.0.1 - - [29/Jun/2026 15:41:46] "POST /api/chat HTTP/1.1" 200 -
+2026-06-29 15:41:46,992 INFO werkzeug 127.0.0.1 - - [29/Jun/2026 15:41:46] "GET /api/tasks?include_subtasks=true HTTP/1.1" 200 -
+2026-06-29 15:41:47,002 INFO werkzeug 127.0.0.1 - - [29/Jun/2026 15:41:47] "GET /api/spaces HTTP/1.1" 200 -
+2026-06-29 15:41:47,002 INFO werkzeug 127.0.0.1 - - [29/Jun/2026 15:41:47] "GET /api/notes HTTP/1.1" 200 -
+2026-06-29 15:41:47,022 INFO werkzeug 127.0.0.1 - - [29/Jun/2026 15:41:47] "GET /api/workspaces HTTP/1.1" 200 -
+2026-06-29 15:41:47,037 INFO werkzeug 127.0.0.1 - - [29/Jun/2026 15:41:47] "GET /api/analytics HTTP/1.1" 200 -
+2026-06-29 15:41:58,880 INFO werkzeug 127.0.0.1 - - [29/Jun/2026 15:41:58] "GET /api/status HTTP/1.1" 200 -
+2026-06-29 15:42:28,885 INFO werkzeug 127.0.0.1 - - [29/Jun/2026 15:42:28] "GET /api/status HTTP/1.1" 200 -
+2026-06-29 15:42:53,930 INFO werkzeug  * Detected change in 'C:\\Aijenda\\Daleel\\Daleel-Chatbot-Ajenda\\backend\\rag_examples.py', reloading
+2026-06-29 15:42:54,136 INFO werkzeug  * Detected change in 'C:\\Aijenda\\Daleel\\Daleel-Chatbot-Ajenda\\backend\\seed_demo (1).py', reloading
+2026-06-29 15:42:54,182 INFO werkzeug  * Detected change in 'C:\\Aijenda\\Daleel\\Daleel-Chatbot-Ajenda\\backend\\seed_demo.py', reloading
+2026-06-29 15:42:56,620 INFO werkzeug  * Restarting with watchdog (windowsapi)
+2026-06-29 15:43:24,378 INFO root SQLite database initialized.
+2026-06-29 15:43:24,386 INFO sentence_transformers.SentenceTransformer Use pytorch device_name: cpu
+2026-06-29 15:43:24,386 INFO sentence_transformers.SentenceTransformer Load pretrained SentenceTransformer: all-MiniLM-L6-v2
+2026-06-29 15:43:30,323 INFO root Loaded RAG examples.
+2026-06-29 15:43:30,341 INFO root Loaded RAG index from cache.
+2026-06-29 15:43:30,341 INFO root AI Handler initialized. ADK active: True
+2026-06-29 15:43:30,341 INFO root Database and AI Handler initialized.
+2026-06-29 15:43:30,409 WARNING werkzeug  * Debugger is active!
+2026-06-29 15:43:30,422 INFO werkzeug  * Debugger PIN: 223-987-575
+2026-06-29 15:43:30,495 INFO werkzeug 127.0.0.1 - - [29/Jun/2026 15:43:30] "GET /api/status HTTP/1.1" 200 -
+2026-06-29 15:43:30,508 INFO werkzeug 127.0.0.1 - - [29/Jun/2026 15:43:30] "GET /api/status HTTP/1.1" 200 -
+2026-06-29 15:43:58,891 INFO werkzeug 127.0.0.1 - - [29/Jun/2026 15:43:58] "GET /api/status HTTP/1.1" 200 -
+2026-06-29 15:44:28,885 INFO werkzeug 127.0.0.1 - - [29/Jun/2026 15:44:28] "GET /api/status HTTP/1.1" 200 -
+2026-06-29 15:45:14,894 INFO werkzeug 127.0.0.1 - - [29/Jun/2026 15:45:14] "GET /api/status HTTP/1.1" 200 -
+2026-06-29 15:46:14,883 INFO werkzeug 127.0.0.1 - - [29/Jun/2026 15:46:14] "GET /api/status HTTP/1.1" 200 -
+2026-06-29 15:55:52,001 INFO root SQLite database initialized.
+2026-06-29 15:55:52,001 INFO sentence_transformers.SentenceTransformer Use pytorch device_name: cpu
+2026-06-29 15:55:52,001 INFO sentence_transformers.SentenceTransformer Load pretrained SentenceTransformer: all-MiniLM-L6-v2
+2026-06-29 15:55:57,437 INFO root Loaded RAG examples.
+2026-06-29 15:55:57,442 INFO root Loaded RAG index from cache.
+2026-06-29 15:55:57,443 INFO root AI Handler initialized. ADK active: True
+2026-06-29 15:55:57,444 INFO root Database and AI Handler initialized.
+2026-06-29 15:55:57,498 INFO werkzeug [31m[1mWARNING: This is a development server. Do not use it in a production deployment. Use a production WSGI server instead.[0m
+ * Running on http://127.0.0.1:5000
+2026-06-29 15:55:57,498 INFO werkzeug [33mPress CTRL+C to quit[0m
+2026-06-29 15:55:57,529 INFO werkzeug  * Restarting with watchdog (windowsapi)
+2026-06-29 15:56:18,000 INFO root SQLite database initialized.
+2026-06-29 15:56:18,000 INFO sentence_transformers.SentenceTransformer Use pytorch device_name: cpu
+2026-06-29 15:56:18,016 INFO sentence_transformers.SentenceTransformer Load pretrained SentenceTransformer: all-MiniLM-L6-v2
+2026-06-29 15:56:22,875 INFO root Loaded RAG examples.
+2026-06-29 15:56:22,891 INFO root Loaded RAG index from cache.
+2026-06-29 15:56:22,891 INFO root AI Handler initialized. ADK active: True
+2026-06-29 15:56:22,891 INFO root Database and AI Handler initialized.
+2026-06-29 15:56:22,938 WARNING werkzeug  * Debugger is active!
+2026-06-29 15:56:22,938 INFO werkzeug  * Debugger PIN: 223-987-575
+2026-06-29 15:56:22,985 INFO werkzeug 127.0.0.1 - - [29/Jun/2026 15:56:22] "GET /api/status HTTP/1.1" 200 -
+2026-06-29 15:56:22,985 INFO werkzeug 127.0.0.1 - - [29/Jun/2026 15:56:22] "GET /api/status HTTP/1.1" 200 -
+2026-06-29 15:56:28,754 INFO werkzeug 127.0.0.1 - - [29/Jun/2026 15:56:28] "GET /api/status HTTP/1.1" 200 -
+2026-06-29 15:56:40,316 INFO werkzeug 127.0.0.1 - - [29/Jun/2026 15:56:40] "GET / HTTP/1.1" 200 -
+2026-06-29 15:56:40,529 INFO werkzeug 127.0.0.1 - - [29/Jun/2026 15:56:40] "[36mGET /static/script.js HTTP/1.1[0m" 304 -
+2026-06-29 15:56:40,529 INFO werkzeug 127.0.0.1 - - [29/Jun/2026 15:56:40] "[36mGET /static/style.css HTTP/1.1[0m" 304 -
+2026-06-29 15:56:40,564 INFO werkzeug 127.0.0.1 - - [29/Jun/2026 15:56:40] "GET /api/status HTTP/1.1" 200 -
+2026-06-29 15:56:40,586 INFO werkzeug 127.0.0.1 - - [29/Jun/2026 15:56:40] "GET /api/config?lang=en HTTP/1.1" 200 -
+2026-06-29 15:56:40,602 INFO werkzeug 127.0.0.1 - - [29/Jun/2026 15:56:40] "GET /api/welcome HTTP/1.1" 200 -
+2026-06-29 15:56:40,613 INFO werkzeug 127.0.0.1 - - [29/Jun/2026 15:56:40] "GET /api/tasks?include_subtasks=true HTTP/1.1" 200 -
+2026-06-29 15:56:40,640 INFO werkzeug 127.0.0.1 - - [29/Jun/2026 15:56:40] "GET /api/workspaces HTTP/1.1" 200 -
+2026-06-29 15:56:40,646 INFO werkzeug 127.0.0.1 - - [29/Jun/2026 15:56:40] "GET /api/spaces HTTP/1.1" 200 -
+2026-06-29 15:56:40,646 INFO werkzeug 127.0.0.1 - - [29/Jun/2026 15:56:40] "GET /api/notes HTTP/1.1" 200 -
+2026-06-29 15:56:40,682 INFO werkzeug 127.0.0.1 - - [29/Jun/2026 15:56:40] "GET /api/analytics HTTP/1.1" 200 -
+2026-06-29 15:57:10,688 INFO werkzeug 127.0.0.1 - - [29/Jun/2026 15:57:10] "GET /api/status HTTP/1.1" 200 -
+2026-06-29 15:57:40,704 INFO werkzeug 127.0.0.1 - - [29/Jun/2026 15:57:40] "GET /api/status HTTP/1.1" 200 -
+2026-06-29 15:58:01,326 INFO google_genai.models AFC is enabled with max remote calls: 10.
+2026-06-29 15:58:03,970 INFO httpx HTTP Request: POST https://generativelanguage.googleapis.com/v1beta/models/gemini-2.5-flash:generateContent "HTTP/1.1 200 OK"
+2026-06-29 15:58:03,985 INFO root Router classified intent as: COMPLEX for user yahya
+2026-06-29 15:58:03,985 INFO sentence_transformers.SentenceTransformer Use pytorch device_name: cpu
+2026-06-29 15:58:03,992 INFO sentence_transformers.SentenceTransformer Load pretrained SentenceTransformer: all-MiniLM-L6-v2
+2026-06-29 15:58:09,907 INFO root Loaded RAG examples.
+2026-06-29 15:58:09,922 INFO root Loaded RAG index from cache.
+2026-06-29 15:58:09,922 INFO root Precomputing tool embeddings for Dynamic Retrieval...
+2026-06-29 15:58:10,693 INFO werkzeug 127.0.0.1 - - [29/Jun/2026 15:58:10] "GET /api/status HTTP/1.1" 200 -
+2026-06-29 15:58:11,172 INFO root Dynamically retrieved 8 tools for this prompt.
+2026-06-29 15:58:13,891 INFO google_adk.google.adk.models.google_llm Sending out request, model: gemini-2.5-flash, backend: GoogleLLMVariant.GEMINI_API, stream: False
+2026-06-29 15:58:27,264 INFO google_adk.google.adk.models.google_llm Response received from the model.
+2026-06-29 15:58:27,264 WARNING google_genai.types Warning: there are non-text parts in the response: ['function_call'], returning concatenated text result from text parts. Check the full candidates.content.parts accessor to get the full model response.
+2026-06-29 15:58:30,613 INFO google_adk.google.adk.models.google_llm Sending out request, model: gemini-2.5-flash, backend: GoogleLLMVariant.GEMINI_API, stream: False
+2026-06-29 15:58:34,328 INFO google_adk.google.adk.models.google_llm Response received from the model.
+2026-06-29 15:58:34,378 INFO werkzeug 127.0.0.1 - - [29/Jun/2026 15:58:34] "POST /api/chat HTTP/1.1" 200 -
+2026-06-29 15:58:34,411 INFO werkzeug 127.0.0.1 - - [29/Jun/2026 15:58:34] "GET /api/tasks?include_subtasks=true HTTP/1.1" 200 -
+2026-06-29 15:58:34,422 INFO werkzeug 127.0.0.1 - - [29/Jun/2026 15:58:34] "GET /api/workspaces HTTP/1.1" 200 -
+2026-06-29 15:58:34,429 INFO werkzeug 127.0.0.1 - - [29/Jun/2026 15:58:34] "GET /api/spaces HTTP/1.1" 200 -
+2026-06-29 15:58:34,430 INFO werkzeug 127.0.0.1 - - [29/Jun/2026 15:58:34] "GET /api/notes HTTP/1.1" 200 -
+2026-06-29 15:58:34,445 INFO werkzeug 127.0.0.1 - - [29/Jun/2026 15:58:34] "GET /api/analytics HTTP/1.1" 200 -
+2026-06-29 15:58:40,688 INFO werkzeug 127.0.0.1 - - [29/Jun/2026 15:58:40] "GET /api/status HTTP/1.1" 200 -
+2026-06-29 15:59:10,877 INFO werkzeug 127.0.0.1 - - [29/Jun/2026 15:59:10] "GET /api/status HTTP/1.1" 200 -
+2026-06-29 15:59:40,885 INFO werkzeug 127.0.0.1 - - [29/Jun/2026 15:59:40] "GET /api/status HTTP/1.1" 200 -
+2026-06-29 16:00:09,235 INFO werkzeug  * Detected change in 'C:\\Aijenda\\Daleel\\Daleel-Chatbot-Ajenda\\backend\\ai_handler.py', reloading
+2026-06-29 16:00:09,235 INFO werkzeug  * Detected change in 'C:\\Aijenda\\Daleel\\Daleel-Chatbot-Ajenda\\backend\\ai_handler.py', reloading
+2026-06-29 16:00:11,301 INFO werkzeug  * Restarting with watchdog (windowsapi)
+2026-06-29 16:00:37,282 INFO root SQLite database initialized.
+2026-06-29 16:00:37,297 INFO sentence_transformers.SentenceTransformer Use pytorch device_name: cpu
+2026-06-29 16:00:37,297 INFO sentence_transformers.SentenceTransformer Load pretrained SentenceTransformer: all-MiniLM-L6-v2
+2026-06-29 16:01:32,447 INFO root Loaded RAG examples.
+2026-06-29 16:01:32,451 INFO root Loaded RAG index from cache.
+2026-06-29 16:01:32,452 INFO root AI Handler initialized. ADK active: True
+2026-06-29 16:01:32,453 INFO root Database and AI Handler initialized.
+2026-06-29 16:01:32,500 WARNING werkzeug  * Debugger is active!
+2026-06-29 16:01:32,500 INFO werkzeug  * Debugger PIN: 223-987-575
+2026-06-29 16:01:32,566 INFO werkzeug 127.0.0.1 - - [29/Jun/2026 16:01:32] "GET /api/status HTTP/1.1" 200 -
+2026-06-29 16:01:32,580 INFO werkzeug 127.0.0.1 - - [29/Jun/2026 16:01:32] "GET /api/status HTTP/1.1" 200 -
