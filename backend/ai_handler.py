@@ -857,8 +857,9 @@ class AdkActionHandler:
         tool_events = []
         session_id = f"{user_id}_action_session"
         
-        try: _run_async(self.session_service.get_session(app_name="iGenda_App", user_id=user_id, session_id=session_id))
-        except Exception: _run_async(self.session_service.create_session(app_name="iGenda_App", user_id=user_id, session_id=session_id))
+        session = _run_async(self.session_service.get_session(app_name="iGenda_App", user_id=user_id, session_id=session_id))
+        if session is None:
+            _run_async(self.session_service.create_session(app_name="iGenda_App", user_id=user_id, session_id=session_id))
         
         tools = self._register_tools(user_id)
         self._build_agent(tools)
@@ -925,12 +926,17 @@ class EnhancedAIHandler:
             "You are an intent classification router for an AI productivity app. "
             "The user may speak in English or Arabic. "
             "Classify the user's message into EXACTLY ONE of these categories:\n\n"
-            "1. ACTION: Creating, updating, deleting, or asking about a single task, note, or reminder. "
-            "(e.g., 'add a task', 'remind me', 'مهمة', 'ذكرني', 'ملاحظة', 'احذف').\n"
-            "2. COMPLEX: Planning a multi-day trip, generating a study schedule, workspaces, complex projects, or anything requiring multiple steps. "
-            "(e.g., 'plan', 'trip', 'schedule', 'project', 'خطط', 'جدول', 'مشروع', 'سفر', 'إجازة').\n"
+            "1. ACTION: Simple, self-contained CRUD operations where ALL needed information "
+            "is already in the user's message. Creating, updating, deleting a single task, note, or reminder. "
+            "(e.g., 'add a task to buy milk', 'remind me at 5pm', 'مهمة', 'ذكرني', 'احذف').\n"
+            "2. COMPLEX: Anything requiring external data lookups (news, sports, weather, research), "
+            "multi-step planning, workspaces, complex projects, OR saving a note/task whose content "
+            "must first be fetched or generated. "
+            "(e.g., 'summarize the match and save it', 'plan a trip', 'خطط', 'جدول', 'مشروع', 'ابحث').\n"
             "3. CHAT: Casual conversation, greetings, or general questions not related to database tasks. "
             "(e.g., 'hello', 'how are you', 'مرحبا', 'كيف حالك').\n\n"
+            "RULE: If the request involves fetching or researching external information BEFORE saving, "
+            "it is COMPLEX regardless of whether the final action is just creating a note or task.\n\n"
             "Reply with ONLY the category word: ACTION, COMPLEX, or CHAT."
         )
         try:
@@ -955,7 +961,13 @@ class EnhancedAIHandler:
             if intent == "CHAT":
                 try:
                     client = genai.Client()
-                    sys_inst = "You are iGenda. Be warm and very brief. Reply in the user's exact language."
+                    sys_inst = (
+                        "You are iGenda, an AI productivity assistant. "
+                        "When a user asks what you can do, give a short but concrete list of your capabilities: "
+                        "managing tasks and subtasks, notes, workspaces, reminders, web search, sports/news lookups, "
+                        "GitHub issues, Gmail, complex project planning, and daily briefings. "
+                        "Be warm and conversational. Reply in the user's exact language."
+                    )
                     response = client.models.generate_content(
                         model='gemini-2.5-flash', contents=user_message,
                         config=types.GenerateContentConfig(system_instruction=sys_inst, temperature=0.5)
