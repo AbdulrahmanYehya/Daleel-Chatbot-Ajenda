@@ -24,3 +24,5 @@ python-bidi==0.4.2
 # Utilities
 python-dotenv==1.0.1
 duckduckgo-search==5.2.2
+
+gunicorn==22.0.0
