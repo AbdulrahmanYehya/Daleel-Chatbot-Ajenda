@@ -15,11 +15,23 @@ Chat (SSE stream): text/event-stream
   event: error        — something went wrong mid-stream
   event: done         — stream complete
 
-WebSocket /ws/alerts  — pushes proactive alerts in real time
+CHANGE NOTE (AI-backend integration doc v2 + Technical Addendum, 2026-07-03):
+  - WS /ws/alerts and GET /api/proactive are removed (deferred to Phase 2 per doc
+    section 4.3 / Action Item 4).
+  - Identity is now read strictly from the X-User-Id header, which the .NET Master
+    Gateway injects only after validating the caller's JWT. There is no dev fallback
+    default anymore — requests without it are rejected with 401.
+  - AI utility/chat routes are now prefixed /api/ai/... to match the .NET gateway's
+    routing matrix (status, welcome, briefing, config, chat, chat/stream, clear).
+  - Workspace/space/task/note CRUD, analytics, and memory routes below still read
+    from the local SQLite `Database` class. They were intentionally NOT migrated to
+    the .NET gateway in this pass — the integration doc doesn't specify response
+    schemas for /api/WorkSpaces/... or expose a flat/cross-workspace task listing
+    endpoint that several of these routes need. See the chat handoff notes for the
+    full list of what's still pending backend confirmation.
 """
 
 from flask import Flask, render_template, request, jsonify, send_file, Response, stream_with_context
-from flask_sock import Sock
 from database import Database
 from ai_handler import EnhancedAIHandler
 from nlp_handler import DocumentProcessor
@@ -36,7 +48,6 @@ from bidi.algorithm import get_display
 
 app = Flask(__name__)
 app.secret_key = 'ai_key_secure'
-sock = Sock(app)  # WebSocket support via flask-sock
 
 # =====================================================================
 # LOGGING
@@ -66,11 +77,21 @@ except Exception as e:
 
 # =====================================================================
 # AUTH HELPER
-# For handoff: The backend team will replace this with their JWT/Session auth.
-# Currently defaults to 'yahya' to keep your local test UI working.
+# Per the Technical Addendum: the .NET Master Gateway strips this header from
+# any external client-facing request, then injects the verified user GUID
+# into X-User-Id itself only after validating the caller's JWT. This sidecar
+# trusts that header and does not re-validate anything — there is no dev
+# fallback default anymore.
 # =====================================================================
 def get_current_user_id():
-    return request.headers.get('X-User-Id', 'yahya')
+    return request.headers.get('X-User-Id')
+
+def require_user_id():
+    """Returns (user_id, error_response). error_response is None on success."""
+    user_id = get_current_user_id()
+    if not user_id:
+        return None, err("UNAUTHORIZED", "Missing or invalid X-User-Id identity header.", 401)
+    return user_id, None
 
 # =====================================================================
 # STANDARD RESPONSE HELPERS
@@ -97,19 +118,20 @@ def sse(event: str, data: dict) -> str:
 def home():
     return render_template('index.html')
 
-@app.route('/api/status')
+@app.route('/api/ai/status')
 def status():
     if not ai_handler:
         return ok({"status": "offline", "model": None})
     health = ai_handler.check_model_health()
     return ok(health)
 
-@app.route('/api/welcome')
+@app.route('/api/ai/welcome')
 def welcome():
     if not db:
         return ok({"message": "Hello! I am your AI assistant."})
-    
-    user_id = get_current_user_id()
+
+    user_id, error = require_user_id()
+    if error: return error
     memory = db.get_all_memory(user_id=user_id)
     todays = db.get_todays_tasks(user_id=user_id)
     overdue = db.get_overdue_tasks(user_id=user_id)
@@ -128,13 +150,15 @@ def welcome():
         parts.append(f"Keep pushing toward: *{goal}* 💪")
     return ok({"message": "\n".join(parts)})
 
-@app.route('/api/briefing')
+@app.route('/api/ai/briefing')
 def briefing():
     if not db:
         return ok({})
-    return ok(db.get_daily_briefing(user_id=get_current_user_id()))
+    user_id, error = require_user_id()
+    if error: return error
+    return ok(db.get_daily_briefing(user_id=user_id))
 
-@app.route('/api/config')
+@app.route('/api/ai/config')
 def get_config():
     from config import Config
     lang = request.args.get('lang', 'en')
@@ -144,7 +168,7 @@ def get_config():
 # CHAT — SSE STREAMING
 # =====================================================================
 
-@app.route('/api/chat/stream', methods=['POST'])
+@app.route('/api/ai/chat/stream', methods=['POST'])
 def chat_stream():
     """
     SSE streaming chat endpoint.
@@ -155,10 +179,16 @@ def chat_stream():
             yield sse("done", {"processing_time": 0})
         return Response(stream_with_context(_error_stream()), mimetype='text/event-stream')
 
+    user_id = get_current_user_id()
+    if not user_id:
+        def _unauth_stream():
+            yield sse("error", {"code": "UNAUTHORIZED", "message": "Missing or invalid X-User-Id identity header."})
+            yield sse("done", {"processing_time": 0})
+        return Response(stream_with_context(_unauth_stream()), mimetype='text/event-stream')
+
     data = request.json or {}
     user_message = data.get('message', '').strip()
     language = data.get('language', 'en')
-    user_id = get_current_user_id()
 
     if not user_message:
         def _empty_stream():
@@ -274,17 +304,19 @@ def chat_stream():
         }
     )
 
-@app.route('/api/chat', methods=['POST'])
+@app.route('/api/ai/chat', methods=['POST'])
 def chat():
     if not ai_handler or not db:
         return err("SERVICE_UNAVAILABLE", "AI service not initialized", 503)
+    user_id, error = require_user_id()
+    if error: return error
     data = request.json or {}
     user_message = data.get('message', '').strip()
     if not user_message:
         return err("EMPTY_MESSAGE", "Message cannot be empty")
     try:
         result = ai_handler.process_multimodal_message(
-            user_id=get_current_user_id(),
+            user_id=user_id,
             user_message=user_message,
             message_type='text',
             language=data.get('language', 'en'),
@@ -307,81 +339,12 @@ def _format_agent_response(result: dict) -> dict:
     }
 
 # =====================================================================
-# WEBSOCKET — PROACTIVE ALERTS (push-based)
+# WEBSOCKET / PROACTIVE ALERTS — REMOVED
+# Per doc section 4.3 / Action Item 4: WS /ws/alerts and the background
+# proactive-alert worker thread are deferred to Phase 2 (SignalR, .NET side).
+# The old worker also only ever evaluated a hardcoded 'yahya' user, which
+# would have needed fixing for multi-tenancy anyway even if it had stayed.
 # =====================================================================
-
-_ws_clients: list = []
-_ws_lock = threading.Lock()
-
-def _broadcast_alert(alert: dict):
-    dead = []
-    with _ws_lock:
-        for ws in _ws_clients:
-            try:
-                ws.send(json.dumps({"type": "alert", "data": alert}))
-            except Exception:
-                dead.append(ws)
-        for ws in dead:
-            _ws_clients.remove(ws)
-
-@sock.route('/ws/alerts')
-def ws_alerts(ws):
-    with _ws_lock:
-        _ws_clients.append(ws)
-    logging.info(f"WebSocket client connected. Total: {len(_ws_clients)}")
-    try:
-        ws.send(json.dumps({"type": "connected", "data": {"message": "iGenda alerts connected"}}))
-        while True:
-            msg = ws.receive(timeout=30)
-            if msg is None:
-                break
-            try:
-                data = json.loads(msg)
-                if data.get("type") == "ping":
-                    ws.send(json.dumps({"type": "pong", "data": {"ts": int(time.time())}}))
-            except Exception:
-                pass
-    except Exception:
-        pass
-    finally:
-        with _ws_lock:
-            if ws in _ws_clients:
-                _ws_clients.remove(ws)
-        logging.info(f"WebSocket client disconnected. Total: {len(_ws_clients)}")
-
-def _proactive_alert_worker():
-    """
-    Background thread — checks for overdue tasks and heavy schedules
-    every 60 seconds and pushes alerts to all connected WebSocket clients.
-    NOTE: For the backend team, this currently defaults to evaluating 'yahya'. 
-    You will need to iterate over connected active users.
-    """
-    while True:
-        time.sleep(60)
-        if not db or not _ws_clients:
-            continue
-        try:
-            # Defaulting to 'yahya' for the local worker thread
-            user_id = 'yahya'
-            overdue = db.get_overdue_tasks(user_id=user_id)
-            if overdue:
-                _broadcast_alert({
-                    "type": "overdue",
-                    "message": f"You have {len(overdue)} overdue task(s).",
-                    "tasks": [t['title'] for t in overdue[:3]]
-                })
-            todays = db.get_todays_tasks(user_id=user_id)
-            if len(todays) > 6:
-                _broadcast_alert({
-                    "type": "heavy_schedule",
-                    "message": f"You have {len(todays)} tasks today — heavy schedule.",
-                    "tasks": []
-                })
-        except Exception as e:
-            logging.warning(f"Proactive worker error: {e}")
-
-_alert_thread = threading.Thread(target=_proactive_alert_worker, daemon=True)
-_alert_thread.start()
 
 # =====================================================================
 # CRUD — WORKSPACES
@@ -390,20 +353,26 @@ _alert_thread.start()
 @app.route('/api/workspaces', methods=['GET'])
 def get_workspaces():
     if not db: return err("DB_UNAVAILABLE", "Database not available", 503)
-    return ok(db.get_workspaces(user_id=get_current_user_id()))
+    user_id, error = require_user_id()
+    if error: return error
+    return ok(db.get_workspaces(user_id=user_id))
 
 @app.route('/api/workspaces/<int:ws_id>', methods=['PATCH'])
 def update_workspace(ws_id):
     if not db: return err("DB_UNAVAILABLE", "Database not available", 503)
+    user_id, error = require_user_id()
+    if error: return error
     data = request.json or {}
-    ws = db.update_workspace(user_id=get_current_user_id(), workspace_id=ws_id, updates=data)
+    ws = db.update_workspace(user_id=user_id, workspace_id=ws_id, updates=data)
     if not ws: return err("NOT_FOUND", f"Workspace {ws_id} not found", 404)
     return ok(ws)
 
 @app.route('/api/workspaces/<int:ws_id>', methods=['DELETE'])
 def delete_workspace(ws_id):
     if not db: return err("DB_UNAVAILABLE", "Database not available", 503)
-    success = db.delete_workspace(user_id=get_current_user_id(), workspace_id=ws_id)
+    user_id, error = require_user_id()
+    if error: return error
+    success = db.delete_workspace(user_id=user_id, workspace_id=ws_id)
     if not success: return err("NOT_FOUND", f"Workspace {ws_id} not found", 404)
     return ok({"deleted": True, "id": ws_id})
 
@@ -414,35 +383,44 @@ def delete_workspace(ws_id):
 @app.route('/api/spaces', methods=['GET'])
 def get_spaces():
     if not db: return err("DB_UNAVAILABLE", "Database not available", 503)
+    user_id, error = require_user_id()
+    if error: return error
     workspace_id = request.args.get('workspace_id')
-    spaces = db.get_spaces(user_id=get_current_user_id(), workspace_id=int(workspace_id) if workspace_id else None)
+    spaces = db.get_spaces(user_id=user_id, workspace_id=int(workspace_id) if workspace_id else None)
     return ok(spaces)
 
 @app.route('/api/tasks/<int:task_id>/subtasks', methods=['GET'])
 def get_task_subtasks(task_id):
     if not db: return err("DB_UNAVAILABLE", "Database not available", 503)
-    data = db.get_task_with_subtasks(user_id=get_current_user_id(), task_id=task_id)
+    user_id, error = require_user_id()
+    if error: return error
+    data = db.get_task_with_subtasks(user_id=user_id, task_id=task_id)
     if not data: return err("NOT_FOUND", f"Task {task_id} not found", 404)
     return ok(data)
 
 @app.route('/api/tasks', methods=['GET'])
 def get_tasks():
     if not db: return err("DB_UNAVAILABLE", "Database not available", 503)
+    user_id, error = require_user_id()
+    if error: return error
     include_subtasks = request.args.get('include_subtasks', 'false').lower() == 'true'
-    return ok(db.get_tasks(user_id=get_current_user_id(), include_subtasks=include_subtasks))
+    return ok(db.get_tasks(user_id=user_id, include_subtasks=include_subtasks))
 
 @app.route('/api/tasks/<int:task_id>', methods=['DELETE'])
 def delete_task(task_id):
     if not db: return err("DB_UNAVAILABLE", "Database not available", 503)
-    success = db.delete_task(user_id=get_current_user_id(), task_id=task_id)
+    user_id, error = require_user_id()
+    if error: return error
+    success = db.delete_task(user_id=user_id, task_id=task_id)
     if not success: return err("NOT_FOUND", f"Task {task_id} not found", 404)
     return ok({"deleted": True, "id": task_id})
 
 @app.route('/api/tasks/<int:task_id>/complete', methods=['POST'])
 def complete_task(task_id):
     if not db: return err("DB_UNAVAILABLE", "Database not available", 503)
+    user_id, error = require_user_id()
+    if error: return error
     data = request.json or {}
-    user_id = get_current_user_id()
     completed = data.get('completed', True)
     task = db.complete_task(user_id=user_id, task_id=task_id) if completed else db.uncomplete_task(user_id=user_id, task_id=task_id)
     if not task: return err("NOT_FOUND", f"Task {task_id} not found", 404)
@@ -455,12 +433,16 @@ def complete_task(task_id):
 @app.route('/api/notes', methods=['GET'])
 def get_notes():
     if not db: return err("DB_UNAVAILABLE", "Database not available", 503)
-    return ok(db.get_notes(user_id=get_current_user_id()))
+    user_id, error = require_user_id()
+    if error: return error
+    return ok(db.get_notes(user_id=user_id))
 
 @app.route('/api/notes/<int:note_id>', methods=['DELETE'])
 def delete_note(note_id):
     if not db: return err("DB_UNAVAILABLE", "Database not available", 503)
-    success = db.delete_note(user_id=get_current_user_id(), note_id=note_id)
+    user_id, error = require_user_id()
+    if error: return error
+    success = db.delete_note(user_id=user_id, note_id=note_id)
     if not success: return err("NOT_FOUND", f"Note {note_id} not found", 404)
     return ok({"deleted": True, "id": note_id})
 
@@ -471,62 +453,56 @@ def delete_note(note_id):
 @app.route('/api/analytics')
 def analytics():
     if not db: return err("DB_UNAVAILABLE", "Database not available", 503)
-    return ok(db.get_analytics(user_id=get_current_user_id()))
+    user_id, error = require_user_id()
+    if error: return error
+    return ok(db.get_analytics(user_id=user_id))
 
-@app.route('/api/smart-analytics')
+@app.route('/api/ai/analytics/smart')
 def smart_analytics():
+    # CHANGE NOTE: renamed to match the doc's documented path. Per section 7.1,
+    # this is listed under "Remaining Implementation Scope" on the .NET side (not
+    # yet built) — still serving from local db.get_smart_analytics() for now.
     if not db: return err("DB_UNAVAILABLE", "Database not available", 503)
-    return ok(db.get_smart_analytics(user_id=get_current_user_id()))
+    user_id, error = require_user_id()
+    if error: return error
+    return ok(db.get_smart_analytics(user_id=user_id))
 
 # =====================================================================
 # MEMORY
 # =====================================================================
 
-@app.route('/api/memory', methods=['GET'])
+@app.route('/api/ai/memory', methods=['GET'])
 def get_memory():
     if not db: return err("DB_UNAVAILABLE", "Database not available", 503)
-    return ok(db.get_all_memory(user_id=get_current_user_id()))
+    user_id, error = require_user_id()
+    if error: return error
+    return ok(db.get_all_memory(user_id=user_id))
 
-@app.route('/api/memory', methods=['POST'])
+@app.route('/api/ai/memory', methods=['POST'])
 def save_memory():
     if not db: return err("DB_UNAVAILABLE", "Database not available", 503)
+    user_id, error = require_user_id()
+    if error: return error
     data = request.json or {}
     if not data.get('key') or not data.get('value'):
         return err("VALIDATION_ERROR", "Both 'key' and 'value' fields are required")
-    db.save_memory(user_id=get_current_user_id(), key=data['key'], value=data['value'])
+    db.save_memory(user_id=user_id, key=data['key'], value=data['value'])
     return ok({"key": data['key'], "value": data['value']})
 
-@app.route('/api/memory/<key>', methods=['DELETE'])
+@app.route('/api/ai/memory/<key>', methods=['DELETE'])
 def delete_memory(key):
     if not db: return err("DB_UNAVAILABLE", "Database not available", 503)
-    success = db.delete_memory(user_id=get_current_user_id(), key=key)
+    user_id, error = require_user_id()
+    if error: return error
+    success = db.delete_memory(user_id=user_id, key=key)
     if not success: return err("NOT_FOUND", f"Memory key '{key}' not found", 404)
     return ok({"deleted": True, "key": key})
 
 # =====================================================================
-# PROACTIVE — polling fallback
+# PROACTIVE — REMOVED
+# GET /api/proactive is deprecated per doc section 4.3 ("proactive HTTP
+# polling fallback loops are disabled within the current MVP scope").
 # =====================================================================
-
-@app.route('/api/proactive')
-def proactive_check():
-    if not db: return ok({"alerts": []})
-    alerts = []
-    user_id = get_current_user_id()
-    overdue = db.get_overdue_tasks(user_id=user_id)
-    if overdue:
-        alerts.append({
-            "type": "overdue",
-            "message": f"You have {len(overdue)} overdue task(s).",
-            "tasks": [t['title'] for t in overdue[:3]]
-        })
-    todays = db.get_todays_tasks(user_id=user_id)
-    if len(todays) > 6:
-        alerts.append({
-            "type": "heavy_schedule",
-            "message": f"You have {len(todays)} tasks today — consider rescheduling.",
-            "tasks": []
-        })
-    return ok({"alerts": alerts})
 
 # =====================================================================
 # UPLOAD
@@ -536,6 +512,8 @@ def proactive_check():
 def upload_file():
     if not ai_handler or not db:
         return err("SERVICE_UNAVAILABLE", "AI service not initialized", 503)
+    user_id, error = require_user_id()
+    if error: return error
     if 'file' not in request.files:
         return err("VALIDATION_ERROR", "No file included in request")
     file = request.files['file']
@@ -550,7 +528,7 @@ def upload_file():
         if not text_content:
             return err("EXTRACTION_FAILED", "Could not extract text from file.")
         result = ai_handler.process_multimodal_message(
-            user_id=get_current_user_id(),
+            user_id=user_id,
             user_message=user_prompt,
             message_type='document_text',
             context_data=text_content,
@@ -565,10 +543,12 @@ def upload_file():
 # CLEAR
 # =====================================================================
 
-@app.route('/api/clear', methods=['POST'])
+@app.route('/api/ai/clear', methods=['POST'])
 def clear():
     if not db: return err("DB_UNAVAILABLE", "Database not available", 503)
-    db.clear_all(user_id=get_current_user_id())
+    user_id, error = require_user_id()
+    if error: return error
+    db.clear_all(user_id=user_id)
     return ok({"cleared": True})
 
 # =====================================================================
@@ -624,7 +604,8 @@ def _draw_wrapped(p, text, font_name, font_size, margin, max_width, y, height):
 @app.route('/api/export/pdf/<int:note_id>')
 def export_pdf(note_id):
     if not db: return err("DB_UNAVAILABLE", "Database not available", 503)
-    user_id = get_current_user_id()
+    user_id, error = require_user_id()
+    if error: return error
     notes = db.get_notes(user_id=user_id)
     note = next((n for n in notes if n['id'] == note_id), None)
     if not note: return err("NOT_FOUND", f"Note {note_id} not found", 404)
@@ -655,7 +636,8 @@ def export_pdf(note_id):
 @app.route('/api/export/workspace/<int:workspace_id>')
 def export_workspace_pdf(workspace_id):
     if not db: return err("DB_UNAVAILABLE", "Database not available", 503)
-    user_id = get_current_user_id()
+    user_id, error = require_user_id()
+    if error: return error
     summary = db.get_workspace_summary(user_id=user_id, workspace_id=workspace_id)
     if not summary: return err("NOT_FOUND", f"Workspace {workspace_id} not found", 404)
     
@@ -711,7 +693,8 @@ def export_workspace_pdf(workspace_id):
 @app.route('/api/export/tasks/today')
 def export_today_pdf():
     if not db: return err("DB_UNAVAILABLE", "Database not available", 503)
-    user_id = get_current_user_id()
+    user_id, error = require_user_id()
+    if error: return error
     try:
         tasks = db.get_todays_tasks(user_id=user_id)
         overdue = db.get_overdue_tasks(user_id=user_id)

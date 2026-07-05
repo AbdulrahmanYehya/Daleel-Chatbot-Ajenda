@@ -11,11 +11,26 @@ from dotenv import load_dotenv
 
 load_dotenv()
 
-from rag_handler import EnhancedRAGHandler
 from nlp_handler import LocalSummarizer
+from sentence_transformers import SentenceTransformer
+import backend_client
 import requests
 
 BACKEND_URL = os.getenv("BACKEND_URL")
+
+# ======================================================================================
+# CHANGE NOTE (AI-backend integration doc v2 + Technical Addendum, 2026-07-03):
+# The offline Sentence-Transformer RAG fallback (rag_handler.EnhancedRAGHandler) is
+# deprecated per the doc ("Offline Vector Indexing... completely removed from the
+# execution environment"). It is no longer imported here. The embedder below is used
+# ONLY for dynamic tool retrieval (picking the top-K relevant tools per prompt) — that
+# mechanism was never listed as deprecated, and Action Item 3 (WSGI --preload for
+# "shared tokenizers") only makes sense if something here still loads a transformer
+# model, so it's kept as a direct SentenceTransformer instance instead of going through
+# the old RAG class (which also built an unused example-matching index on every boot).
+# rag_handler.py and rag_examples.py are no longer imported anywhere and can be
+# removed from the project once the backend team confirms nothing else depends on them.
+# ======================================================================================
 
 try:
     from google.adk.agents import Agent
@@ -79,7 +94,7 @@ class AdkComplexHandler:
     def __init__(self, database):
         self.db = database
         self.session_service = InMemorySessionService()
-        self.embedder = EnhancedRAGHandler().model
+        self.embedder = SentenceTransformer('all-MiniLM-L6-v2')
         self._precompute_tool_embeddings()
 
     def _precompute_tool_embeddings(self):
@@ -95,29 +110,13 @@ class AdkComplexHandler:
             
         self.tool_vectors = self.embedder.encode(self.tool_docs)
 
-    def _get_semantic_memory(self, user_id: str, query: str, top_k: int = 3) -> str:
-        """Retrieves only the most relevant memory facts using vector search."""
-        try:
-            memories = self.db.get_all_memory(user_id=user_id)
-            if not memories:
-                return "No persistent memory found."
-            
-            mem_items = list(memories.items())
-            mem_texts = [f"{k}: {v}" for k, v in mem_items]
-            
-            query_vec = self.embedder.encode([query])
-            mem_vecs = self.embedder.encode(mem_texts)
-            similarities = cosine_similarity(query_vec, mem_vecs)[0]
-            
-            top_indices = np.argsort(similarities)[::-1][:top_k]
-            relevant_memories = [mem_texts[i] for i in top_indices if similarities[i] > 0.2]
-            
-            if not relevant_memories:
-                return "No highly relevant memory found for this specific query."
-            return "\n".join(relevant_memories)
-        except Exception as e:
-            logging.warning(f"Semantic memory error: {e}")
-            return "Memory unavailable."
+    # CHANGE NOTE: _get_semantic_memory() removed. The integration doc explicitly
+    # deprecates Python-side semantic memory retrieval ("removed: semantic memory
+    # retrieval... embedding comparisons computed natively in-memory within the .NET
+    # service layer"). Proactive memory-context injection into the agent's system
+    # prompt is gone; memory is now only reachable on-demand via tool_get_memory /
+    # tool_save_memory (still local-SQLite-backed — see backend_client.py header for
+    # why those weren't migrated yet).
 
     def _retrieve_tools(self, user_id: str, user_message: str, top_k: int = 8, user_token: str = "") -> list:
         query_vector = self.embedder.encode([user_message])
@@ -208,32 +207,43 @@ class AdkComplexHandler:
             CRITICAL: USE THIS TOOL FOR ANY REQUEST TO PLAN A TRIP, STUDY SCHEDULE, OR COMPLEX PROJECT.
             Creates a full workspace, spaces, tasks, and subtasks perfectly structured using Pydantic.
             """
+            # CHANGE NOTE (Technical Amendment AI2.1): the persist schema was expanded
+            # to carry workspace_description, workspace_color, and per-task
+            # description/due_date/due_time — the earlier data-loss gap is closed.
+            # Every field the ProjectPlan pydantic model captures is now forwarded.
             try:
-                ws = db.create_workspace(user_id=user_id, name=plan_data.workspace.name, description=plan_data.workspace.description, color=plan_data.workspace.color)
-                
-                tasks_created = 0
-                subtasks_created = 0
-                
-                for space_data in plan_data.spaces:
-                    sp = db.create_space(user_id=user_id, name=space_data.name, workspace_id=ws['id'])
-                    for task_data in space_data.tasks:
-                        task = db.create_task(
-                            user_id=user_id,
-                            title=task_data.title, 
-                            description=task_data.description,
-                            due_date=task_data.due_date,
-                            due_time=task_data.due_time,
-                            priority=task_data.priority, 
-                            workspace_id=ws['id'], 
-                            space_id=sp['id']
-                        )
-                        tasks_created += 1
-                        
-                        for sub in task_data.subtasks:
-                            db.create_task(user_id=user_id, title=sub.title, parent_id=task['id'], workspace_id=ws['id'], space_id=sp['id'])
-                            subtasks_created += 1
-                            
-                return f"SUCCESS: Created Workspace '{ws['name']}' with {len(plan_data.spaces)} spaces, {tasks_created} tasks, and {subtasks_created} subtasks perfectly nested."
+                tasks_created = sum(len(s.tasks) for s in plan_data.spaces)
+                subtasks_created = sum(len(t.subtasks) for s in plan_data.spaces for t in s.tasks)
+
+                payload = {
+                    "workspace_name": plan_data.workspace.name,
+                    "workspace_description": plan_data.workspace.description,
+                    "workspace_color": plan_data.workspace.color,
+                    "spaces": [
+                        {
+                            "space_name": space.name,
+                            "tasks": [
+                                {
+                                    "title": task.title,
+                                    "description": task.description,
+                                    "due_date": task.due_date,
+                                    "due_time": task.due_time,
+                                    "priority": backend_client.priority_to_int(task.priority),
+                                    "subtasks": [{"title": sub.title} for sub in task.subtasks],
+                                }
+                                for task in space.tasks
+                            ],
+                        }
+                        for space in plan_data.spaces
+                    ],
+                }
+                backend_client.persist_project_plan(user_id, payload)
+                return (
+                    f"SUCCESS: Created Workspace '{plan_data.workspace.name}' with {len(plan_data.spaces)} spaces, "
+                    f"{tasks_created} tasks, and {subtasks_created} subtasks, including descriptions and due dates."
+                )
+            except backend_client.BackendError as e:
+                return f"FAILED to create plan: {e}"
             except Exception as e:
                 return f"FAILED to create plan: {e}"
 
@@ -662,12 +672,13 @@ class AdkComplexHandler:
         return ""
 
     def _build_agent(self, selected_tools, user_id, user_message):
-        memory_context = self._get_semantic_memory(user_id, user_message)
-
+        # CHANGE NOTE: proactive semantic-memory injection removed (see note above
+        # _retrieve_tools). Also removed the hardcoded "the user is Yahya..." bio —
+        # the multi-tenant identity model in the addendum means this agent now serves
+        # many distinct users scoped by X-User-Id, so a single user's bio can't be
+        # baked into the shared system prompt.
         instruction = (
-            "You are iGenda — an elite, proactive AI productivity agent. "
-            "The user is Yahya, a Computer Science student at Mansoura University (Class of 2026).\n\n"
-            f"=== RELEVANT USER MEMORY ===\n{memory_context}\n\n"
+            "You are iGenda — an elite, proactive AI productivity agent.\n\n"
             "=== YOUR CORE DIRECTIVES ===\n"
             "1. CONTEXT FIRST: For planning, scheduling, or 'what should I do' — call tool_get_context() first.\n"
             "2. DAILY BRIEFING: When Yahya says 'daily briefing' or 'good morning' — call tool_daily_briefing().\n"
@@ -798,10 +809,18 @@ class AdkActionHandler:
             except Exception as e: return f"FAILED: Error searching for task: {e}"
 
         def db_create_task(title: str, description: str = "", due_date: str = "", due_time: str = "", priority: str = "medium") -> str:
+            """Create a single, flat task with no explicit workspace/space."""
+            # CHANGE NOTE: routed through POST /api/ai/tasks/quick instead of local
+            # SQLite. This is exactly the "flat command, no project named" case that
+            # endpoint was introduced for. `description` and `due_time` are accepted
+            # here for the model's benefit but are silently NOT forwarded — the quick
+            # endpoint's schema only has title/due_date/priority.
             try:
-                task = db.create_task(user_id=user_id, title=title, description=description, due_date=due_date, due_time=due_time, priority=priority)
-                return json.dumps({"status": "created", "task_id": task['id'], "title": task['title']})
-            except Exception as e: return f"FAILED: Error creating task: {e}"
+                data = backend_client.create_quick_task(user_id, title=title, due_date=due_date, priority=priority)
+                task_id = (data or {}).get("id") or (data or {}).get("task_id")
+                return json.dumps({"status": "created", "task_id": task_id, "title": title})
+            except backend_client.BackendError as e:
+                return f"FAILED: Error creating task: {e}"
 
         def db_create_subtask(title: str, parent_task_id: int, description: str = "", priority: str = "medium") -> str:
             """Break a task into a subtask. MUST call db_find_task_id FIRST to get the parent_task_id."""
@@ -913,7 +932,9 @@ class AdkActionHandler:
 # ======================================================================================
 class EnhancedAIHandler:
     def __init__(self):
-        self.enhanced_rag = EnhancedRAGHandler()
+        # CHANGE NOTE: EnhancedRAGHandler (offline fallback) removed per the
+        # integration doc's "Offline Vector Indexing" deprecation. There is now no
+        # fallback path if Gemini/ADK is unavailable — see process_multimodal_message.
         self.summarizer = LocalSummarizer()
         self.api_key = os.environ.get("GEMINI_API_KEY")
         self.use_adk = ADK_AVAILABLE and bool(self.api_key)
@@ -953,7 +974,17 @@ class EnhancedAIHandler:
             logging.error(f"Routing failed: {e}")
             return "COMPLEX"
 
-    def process_multimodal_message(self, user_message, message_type='text', context_data=None, database=None, language='en', user_id='yahya', user_token=''):
+    def process_multimodal_message(self, user_message, message_type='text', context_data=None, database=None, language='en', user_id=None, user_token=''):
+        # CHANGE NOTE: default user_id changed from the hardcoded 'yahya' to None.
+        # app.py now rejects requests with no verified X-User-Id before this is ever
+        # called, but keeping a real-looking default here would silently mask that
+        # bug in any other caller instead of failing loudly.
+        if not user_id:
+            return {
+                "response_message": "Unable to identify the requesting user.",
+                "tool_events": [], "tasks": [], "notes": [], "workspaces": [], "spaces": [],
+                "ai_metadata": {"model_used": "none", "error": "missing_user_id"},
+            }
         if self.use_adk and database:
             intent = self._route_intent(user_message)
             logging.info(f"Router classified intent as: {intent} for user {user_id}")
@@ -1003,25 +1034,30 @@ class EnhancedAIHandler:
                 return {"response_message": "Document summarized offline.", "tool_events": [], "tasks": database.get_tasks(user_id=user_id), "notes": database.get_notes(user_id=user_id), "workspaces": database.get_workspaces(user_id=user_id), "spaces": database.get_spaces(user_id=user_id)}
             return {"response_message": "Database not provided.", "tool_events": [], "tasks": [], "notes": [], "workspaces": [], "spaces": []}
 
-        detected_lang = 'ar' if self._is_arabic(user_message) else language
-        rag_result = self.enhanced_rag.get_fallback_response(user_message, detected_lang)
-
-        if database and 'tasks' in rag_result:
-            for t in rag_result['tasks']: database.create_task(user_id=user_id, title=t.get('title'), description=t.get('description'), due_date=t.get('due_date'))
-        if database and 'notes' in rag_result:
-            for n in rag_result['notes']: database.create_note(user_id=user_id, title=n.get('title'), content=n.get('content'))
-
-        rag_result.setdefault('tool_events', [])
-        rag_result.setdefault('spaces', [])
-        rag_result['ai_metadata'] = {"model_used": "local-rag-fallback"}
-        if database:
-            rag_result['workspaces'] = database.get_workspaces(user_id=user_id)
-            if hasattr(database, 'get_spaces'): rag_result['spaces'] = database.get_spaces(user_id=user_id)
-        return rag_result
+        # CHANGE NOTE: the offline RAG fallback that used to run here
+        # (self.enhanced_rag.get_fallback_response) is removed per the integration
+        # doc — "the sidecar relies entirely on remote, cloud-hosted API execution
+        # calls." That means there is now genuinely no fallback if ADK/Gemini is
+        # unavailable (missing GEMINI_API_KEY, import failure, etc.) or if the request
+        # doesn't hit the ADK path above for some other reason. This is a real
+        # reduction in resilience versus the old behavior, not a neutral swap — surface
+        # it to users as a clear error rather than pretending nothing changed.
+        logging.error(
+            "No fallback available: ADK/Gemini path did not handle this request "
+            "(use_adk=%s, database_provided=%s).", self.use_adk, bool(database)
+        )
+        return {
+            "response_message": (
+                "I can't process that right now — the AI service is unavailable and "
+                "there's no offline fallback in this build. Please try again shortly."
+            ),
+            "tool_events": [], "tasks": [], "notes": [], "workspaces": [], "spaces": [],
+            "ai_metadata": {"model_used": "none", "error": "no_fallback_available"},
+        }
 
     def _is_arabic(self, text):
         return bool(re.search(r'[\u0600-\u06FF]', text))
 
     def check_model_health(self):
         if self.use_adk: return {'status': 'healthy', 'model': 'gemini-adk-routed'}
-        return {'status': 'healthy', 'model': 'local-rag-fallback'}
+        return {'status': 'degraded', 'model': None, 'reason': 'ADK/Gemini unavailable, no fallback configured'}
