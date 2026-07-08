@@ -23,12 +23,11 @@ CHANGE NOTE (AI-backend integration doc v2 + Technical Addendum, 2026-07-03):
     default anymore — requests without it are rejected with 401.
   - AI utility/chat routes are now prefixed /api/ai/... to match the .NET gateway's
     routing matrix (status, welcome, briefing, config, chat, chat/stream, clear).
-  - Workspace/space/task/note CRUD, analytics, and memory routes below still read
-    from the local SQLite `Database` class. They were intentionally NOT migrated to
-    the .NET gateway in this pass — the integration doc doesn't specify response
-    schemas for /api/WorkSpaces/... or expose a flat/cross-workspace task listing
-    endpoint that several of these routes need. See the chat handoff notes for the
-    full list of what's still pending backend confirmation.
+  - Workspace/space/task/note CRUD, analytics, memory, briefing, and PDF export
+    routes below now all call the .NET Master Gateway via backend_client.py.
+    Local SQLite (`database.Database`) has been fully removed from this file and
+    from ai_handler.py — there is no remaining `db`/`database` dependency anywhere
+    in the Python service.
 """
 
 from flask import Flask, render_template, request, jsonify, send_file, Response, stream_with_context
@@ -97,21 +96,6 @@ def setup_logging():
     )
 
 setup_logging()
-
-# NOTE: ai_handler.py's Agent tools (tool_save_memory, tool_search_my_data,
-# tool_get_context, the delete tool, etc.) still take a `database` object
-# and call self.db.* internally for things not yet covered by
-# backend_client.py — that's a separate migration inside ai_handler.py
-# itself, out of scope here. Local SQLite `Database` is kept ONLY to
-# satisfy that existing dependency; this file's own CRUD routes below no
-# longer read or write it — those go through backend_client exclusively now.
-from database import Database
-try:
-    db = Database()
-    logging.info("Local Database shim initialized (used only by ai_handler.py's still-unmigrated tools).")
-except Exception as e:
-    logging.error(f"Local DB init failed (non-fatal for this file's CRUD routes): {e}")
-    db = None
 
 # =====================================================================
 # AUTH HELPER
@@ -214,7 +198,7 @@ def chat_stream():
     """
     SSE streaming chat endpoint.
     """
-    if not ai_handler or not db:
+    if not ai_handler:
         def _error_stream():
             yield sse("error", {"code": "SERVICE_UNAVAILABLE", "message": "AI service not initialized"})
             yield sse("done", {"processing_time": 0})
@@ -251,8 +235,7 @@ def chat_stream():
                         user_id=user_id,
                         user_message=user_message,
                         message_type='text',
-                        language=language,
-                        database=db
+                        language=language
                     )
                     with events_lock:
                         result_container["result"] = result
@@ -310,14 +293,15 @@ def chat_stream():
                 "workspaces": result.get("workspaces", [])
             })
 
-            overdue = db.get_overdue_tasks(user_id=user_id)
+            briefing = backend_client.get_briefing(user_id)
+            overdue = briefing.get("overdueTasks", [])
+            todays = briefing.get("todaysTasks", [])
             if overdue:
                 yield sse("alert", {
                     "type": "overdue",
                     "message": f"You have {len(overdue)} overdue task(s).",
                     "tasks": [t['title'] for t in overdue[:3]]
                 })
-            todays = db.get_todays_tasks(user_id=user_id)
             if len(todays) > 6:
                 yield sse("alert", {
                     "type": "heavy_schedule",
@@ -347,7 +331,7 @@ def chat_stream():
 
 @app.route('/api/ai/chat', methods=['POST'])
 def chat():
-    if not ai_handler or not db:
+    if not ai_handler:
         return err("SERVICE_UNAVAILABLE", "AI service not initialized", 503)
     user_id, error = require_user_id()
     if error: return error
@@ -360,8 +344,7 @@ def chat():
             user_id=user_id,
             user_message=user_message,
             message_type='text',
-            language=data.get('language', 'en'),
-            database=db
+            language=data.get('language', 'en')
         )
         return ok(_format_agent_response(result))
     except Exception as e:
@@ -595,7 +578,7 @@ def delete_memory(key):
 
 @app.route('/api/upload', methods=['POST'])
 def upload_file():
-    if not ai_handler or not db:
+    if not ai_handler:
         return err("SERVICE_UNAVAILABLE", "AI service not initialized", 503)
     user_id, error = require_user_id()
     if error: return error
@@ -616,8 +599,7 @@ def upload_file():
             user_id=user_id,
             user_message=user_prompt,
             message_type='document_text',
-            context_data=text_content,
-            database=db
+            context_data=text_content
         )
         return ok(_format_agent_response(result))
     except Exception as e:
@@ -728,13 +710,24 @@ def _draw_wrapped(p, text, font_name, font_size, margin, max_width, y, height):
 
 @app.route('/api/export/pdf/<int:note_id>')
 def export_pdf(note_id):
-    if not db: return err("DB_UNAVAILABLE", "Database not available", 503)
     user_id, error = require_user_id()
     if error: return error
-    notes = db.get_notes(user_id=user_id)
-    note = next((n for n in notes if n['id'] == note_id), None)
+    note = None
+    try:
+        for ws in backend_client.get_workspaces(user_id):
+            ws_id = backend_client._field(ws, "id")
+            for sp in backend_client.get_spaces(user_id, ws_id):
+                sp_id = backend_client._field(sp, "id")
+                for n in backend_client.get_notes(user_id, ws_id, sp_id):
+                    if backend_client._field(n, "id") == note_id:
+                        note = n
+                        break
+                if note: break
+            if note: break
+    except backend_client.BackendError as e:
+        return err("BACKEND_ERROR", str(e), 502)
     if not note: return err("NOT_FOUND", f"Note {note_id} not found", 404)
-    
+
     try:
         buffer = io.BytesIO()
         p, width, height, font_name = _make_canvas(buffer)
@@ -760,12 +753,33 @@ def export_pdf(note_id):
 
 @app.route('/api/export/workspace/<int:workspace_id>')
 def export_workspace_pdf(workspace_id):
-    if not db: return err("DB_UNAVAILABLE", "Database not available", 503)
     user_id, error = require_user_id()
     if error: return error
-    summary = db.get_workspace_summary(user_id=user_id, workspace_id=workspace_id)
-    if not summary: return err("NOT_FOUND", f"Workspace {workspace_id} not found", 404)
-    
+    try:
+        workspace = next(
+            (ws for ws in backend_client.get_workspaces(user_id)
+             if backend_client._field(ws, "id") == workspace_id),
+            None
+        )
+        if not workspace: return err("NOT_FOUND", f"Workspace {workspace_id} not found", 404)
+
+        tasks, notes = [], []
+        for sp in backend_client.get_spaces(user_id, workspace_id):
+            sp_id = backend_client._field(sp, "id")
+            tasks.extend(backend_client.get_tasks(user_id, workspace_id, sp_id))
+            notes.extend(backend_client.get_notes(user_id, workspace_id, sp_id))
+
+        summary = {
+            "workspace": {
+                "name": backend_client._field(workspace, "name", default="Untitled"),
+                "description": backend_client._field(workspace, "description"),
+            },
+            "tasks": tasks,
+            "notes": notes,
+        }
+    except backend_client.BackendError as e:
+        return err("BACKEND_ERROR", str(e), 502)
+
     try:
         buffer = io.BytesIO()
         p, width, height, font_name = _make_canvas(buffer)
@@ -817,12 +831,12 @@ def export_workspace_pdf(workspace_id):
 
 @app.route('/api/export/tasks/today')
 def export_today_pdf():
-    if not db: return err("DB_UNAVAILABLE", "Database not available", 503)
     user_id, error = require_user_id()
     if error: return error
     try:
-        tasks = db.get_todays_tasks(user_id=user_id)
-        overdue = db.get_overdue_tasks(user_id=user_id)
+        briefing = backend_client.get_briefing(user_id)
+        tasks = briefing.get("todaysTasks", [])
+        overdue = briefing.get("overdueTasks", [])
         buffer = io.BytesIO()
         p, width, height, font_name = _make_canvas(buffer)
         margin, max_width = 50, width - 100
