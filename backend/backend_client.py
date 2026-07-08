@@ -53,6 +53,10 @@ def _headers(user_id: str, user_token: str = "") -> dict:
     if not user_id:
         raise BackendError("Cannot call the backend gateway without a verified user_id.")
 
+    logging.info(f"_headers token present: {bool(user_token)}")
+    if user_token:
+        logging.info(f"_headers token prefix: {user_token[:20]}")
+
     headers = {
         "X-User-Id": user_id,
         "Content-Type": "application/json",

@@ -763,6 +763,7 @@ class AdkComplexHandler:
 
     def process_message(self, user_id: str, user_message: str, language: str = 'en', message_type: str = 'text', context_data: str = None, user_token: str = "") -> dict:
         start_time = time.time()
+        logging.info(f"USER TOKEN RECEIVED: {user_token[:20] if user_token else 'EMPTY'}")
         tool_events = []
         try:
             session_id = self._ensure_session(user_id)
@@ -974,6 +975,7 @@ class AdkActionHandler:
 
     def process_message(self, user_id: str, user_message: str, language: str = 'en', user_token: str = "") -> dict:
         start_time = time.time()
+        logging.info(f"USER TOKEN RECEIVED: {user_token[:20] if user_token else 'EMPTY'}")
         tool_events = []
         session_id = f"{user_id}_action_session"
         
