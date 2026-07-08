@@ -967,7 +967,7 @@ class EnhancedAIHandler:
             "Reply with ONLY the category word: ACTION, COMPLEX, or CHAT."
         )
         try:
-            client = genai.Client()
+            client = genai.Client(api_key=os.environ.get("GEMINI_API_KEY"))
             response = client.models.generate_content(
                 model='gemini-2.5-flash',
                 contents=user_message,
@@ -997,9 +997,9 @@ class EnhancedAIHandler:
             
             if intent == "CHAT":
                 try:
-                    client = genai.Client()
+                    client = genai.Client(api_key=os.environ.get("GEMINI_API_KEY"))
                     sys_inst = (
-                        "You are iGenda, an AI productivity assistant. "
+                        "You are AiGenda, an AI productivity assistant. "
                         "When a user asks what you can do, give a short but concrete list of your capabilities: "
                         "managing tasks and subtasks, notes, workspaces, reminders, web search, sports/news lookups, "
                         "GitHub issues, Gmail, complex project planning, and daily briefings. "
