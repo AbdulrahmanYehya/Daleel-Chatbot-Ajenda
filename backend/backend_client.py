@@ -49,10 +49,20 @@ class BackendError(Exception):
     pass
 
 
-def _headers(user_id: str) -> dict:
+def _headers(user_id: str, user_token: str = "") -> dict:
     if not user_id:
         raise BackendError("Cannot call the backend gateway without a verified user_id.")
-    return {"X-User-Id": user_id, "Content-Type": "application/json"}
+
+    headers = {
+        "X-User-Id": user_id,
+        "Content-Type": "application/json",
+    }
+
+    if user_token:
+        headers["Authorization"] = f"Bearer {user_token}"
+
+    return headers
+    
 
 
 def _unwrap(response) -> dict:
@@ -247,9 +257,12 @@ def persist_project_plan(user_id: str, plan: dict) -> dict:
 # WORKSPACES / SPACES  (doc section 4.4)
 # =====================================================================
 
-def get_workspaces(user_id: str) -> list:
-    """GET /api/WorkSpaces"""
-    resp = requests.get(f"{BACKEND_URL}/api/WorkSpaces", headers=_headers(user_id), timeout=TIMEOUT)
+def get_workspaces(user_id: str, user_token: str = ""):
+    resp = requests.get(
+        f"{BACKEND_URL}/api/WorkSpaces",
+        headers=_headers(user_id, user_token),
+        timeout=TIMEOUT,
+    )
     return _unwrap(resp) or []
 
 
@@ -268,9 +281,12 @@ def delete_workspace(user_id: str, workspace_id) -> dict:
     return _unwrap(resp)
 
 
-def get_spaces(user_id: str, workspace_id) -> list:
-    """GET /api/WorkSpaces/{WorkspaceId}/Spaces"""
-    resp = requests.get(f"{BACKEND_URL}/api/WorkSpaces/{workspace_id}/Spaces", headers=_headers(user_id), timeout=TIMEOUT)
+def get_spaces(user_id: str, workspace_id, user_token: str = ""):
+    resp = requests.get(
+        f"{BACKEND_URL}/api/WorkSpaces/{workspace_id}/Spaces",
+        headers=_headers(user_id, user_token),
+        timeout=TIMEOUT,
+    )
     return _unwrap(resp) or []
 
 
@@ -278,35 +294,35 @@ def get_spaces(user_id: str, workspace_id) -> list:
 # TASKS  (doc section 2 + 4.4)
 # =====================================================================
 
-def get_tasks(user_id: str, workspace_id, space_id) -> list:
+def get_tasks(user_id: str, workspace_id, space_id, user_token: str = "") -> list:
     """GET /api/WorkSpaces/{WorkspaceId}/Spaces/{SpaceId}/Tasks"""
     resp = requests.get(
         f"{BACKEND_URL}/api/WorkSpaces/{workspace_id}/Spaces/{space_id}/Tasks",
-        headers=_headers(user_id), timeout=TIMEOUT,
+        headers=_headers(user_id, user_token), timeout=TIMEOUT,
     )
     return _unwrap(resp) or []
 
 
-def get_task(user_id: str, workspace_id, space_id, task_id) -> dict:
+def get_task(user_id: str, workspace_id, space_id, task_id, user_token: str = "") -> dict:
     """GET /api/WorkSpaces/{WorkspaceId}/Spaces/{SpaceId}/Tasks/{Id}"""
     resp = requests.get(
         f"{BACKEND_URL}/api/WorkSpaces/{workspace_id}/Spaces/{space_id}/Tasks/{task_id}",
-        headers=_headers(user_id), timeout=TIMEOUT,
+        headers=_headers(user_id, user_token), timeout=TIMEOUT,
     )
     return _unwrap(resp)
 
 
-def create_task(user_id: str, workspace_id, space_id, title: str, priority: str = "medium") -> dict:
+def create_task(user_id: str, workspace_id, space_id, title: str, priority: str = "medium", user_token: str = "") -> dict:
     """POST /api/WorkSpaces/{wId}/Spaces/{sId}/Tasks (create_isolated_task)."""
     resp = requests.post(
         f"{BACKEND_URL}/api/WorkSpaces/{workspace_id}/Spaces/{space_id}/Tasks",
         json={"title": title, "priority": priority_to_int(priority)},
-        headers=_headers(user_id), timeout=TIMEOUT,
+        headers=_headers(user_id, user_token), timeout=TIMEOUT,
     )
     return _unwrap(resp)
 
 
-def set_task_status(user_id: str, workspace_id, space_id, task_id, status: str) -> dict:
+def set_task_status(user_id: str, workspace_id, space_id, task_id, status: str, user_token: str = "") -> dict:
     """
     PUT /api/WorkSpaces/{wId}/Spaces/{sId}/Tasks/{Id}/status (toggle_task_status)
     Doc-confirmed values: Todo, Ongoing, Completed, Cancelled.
@@ -314,12 +330,12 @@ def set_task_status(user_id: str, workspace_id, space_id, task_id, status: str) 
     resp = requests.put(
         f"{BACKEND_URL}/api/WorkSpaces/{workspace_id}/Spaces/{space_id}/Tasks/{task_id}/status",
         json={"status": status},
-        headers=_headers(user_id), timeout=TIMEOUT,
+        headers=_headers(user_id, user_token), timeout=TIMEOUT,
     )
     return _unwrap(resp)
 
 
-def update_task(user_id: str, workspace_id, space_id, task_id, updates: dict) -> dict:
+def update_task(user_id: str, workspace_id, space_id, task_id, updates: dict, user_token: str = "") -> dict:
     """
     PUT /api/WorkSpaces/{wId}/Spaces/{sId}/Tasks/{Id} (modify_task_details)
     ASSUMPTION: body accepts the same field names as create (title, priority) —
@@ -327,26 +343,26 @@ def update_task(user_id: str, workspace_id, space_id, task_id, updates: dict) ->
     """
     resp = requests.put(
         f"{BACKEND_URL}/api/WorkSpaces/{workspace_id}/Spaces/{space_id}/Tasks/{task_id}",
-        json=updates, headers=_headers(user_id), timeout=TIMEOUT,
+        json=updates, headers=_headers(user_id, user_token), timeout=TIMEOUT,
     )
     return _unwrap(resp)
 
 
-def delete_task(user_id: str, workspace_id, space_id, task_id) -> dict:
+def delete_task(user_id: str, workspace_id, space_id, task_id, user_token: str = "") -> dict:
     """DELETE /api/WorkSpaces/{wId}/Spaces/{sId}/Tasks/{Id} (delete_isolated_task, soft delete)."""
     resp = requests.delete(
         f"{BACKEND_URL}/api/WorkSpaces/{workspace_id}/Spaces/{space_id}/Tasks/{task_id}",
-        headers=_headers(user_id), timeout=TIMEOUT,
+        headers=_headers(user_id, user_token), timeout=TIMEOUT,
     )
     return _unwrap(resp)
 
 
-def set_subtask_status(user_id: str, workspace_id, space_id, task_id, subtask_id, status: str) -> dict:
+def set_subtask_status(user_id: str, workspace_id, space_id, task_id, subtask_id, status: str, user_token: str = "") -> dict:
     """PUT /api/WorkSpaces/{wId}/Spaces/{sId}/Tasks/{tId}/SubTasks/{Id}/status (toggle_subtask_state)."""
     resp = requests.put(
         f"{BACKEND_URL}/api/WorkSpaces/{workspace_id}/Spaces/{space_id}/Tasks/{task_id}/SubTasks/{subtask_id}/status",
         json={"status": status},
-        headers=_headers(user_id), timeout=TIMEOUT,
+        headers=_headers(user_id, user_token), timeout=TIMEOUT,
     )
     return _unwrap(resp)
 
@@ -355,16 +371,16 @@ def set_subtask_status(user_id: str, workspace_id, space_id, task_id, subtask_id
 # NOTES  (doc section 2 + 4.4)
 # =====================================================================
 
-def get_notes(user_id: str, workspace_id, space_id) -> list:
+def get_notes(user_id: str, workspace_id, space_id, user_token: str = "") -> list:
     """GET /api/WorkSpaces/{WorkspaceId}/Spaces/{SpaceId}/Notes"""
     resp = requests.get(
         f"{BACKEND_URL}/api/WorkSpaces/{workspace_id}/Spaces/{space_id}/Notes",
-        headers=_headers(user_id), timeout=TIMEOUT,
+        headers=_headers(user_id, user_token), timeout=TIMEOUT,
     )
     return _unwrap(resp) or []
 
 
-def create_note(user_id: str, workspace_id, space_id, title: str, content: str = "") -> dict:
+def create_note(user_id: str, workspace_id, space_id, title: str, content: str = "", user_token: str = "") -> dict:
     """
     POST /api/WorkSpaces/{wId}/Spaces/{sId}/Notes (persist_new_note)
     ASSUMPTION: body field names (title/content) — not given in the doc.
@@ -372,25 +388,25 @@ def create_note(user_id: str, workspace_id, space_id, title: str, content: str =
     resp = requests.post(
         f"{BACKEND_URL}/api/WorkSpaces/{workspace_id}/Spaces/{space_id}/Notes",
         json={"title": title, "content": content},
-        headers=_headers(user_id), timeout=TIMEOUT,
+        headers=_headers(user_id, user_token), timeout=TIMEOUT,
     )
     return _unwrap(resp)
 
 
-def get_note(user_id: str, workspace_id, space_id, note_id) -> dict:
+def get_note(user_id: str, workspace_id, space_id, note_id, user_token: str = "") -> dict:
     """GET /api/WorkSpaces/{wId}/Spaces/{sId}/Notes/{Id} (fetch_note_content)."""
     resp = requests.get(
         f"{BACKEND_URL}/api/WorkSpaces/{workspace_id}/Spaces/{space_id}/Notes/{note_id}",
-        headers=_headers(user_id), timeout=TIMEOUT,
+        headers=_headers(user_id, user_token), timeout=TIMEOUT,
     )
     return _unwrap(resp)
 
 
-def delete_note(user_id: str, workspace_id, space_id, note_id) -> dict:
+def delete_note(user_id: str, workspace_id, space_id, note_id, user_token: str = "") -> dict:
     """DELETE /api/WorkSpaces/{wId}/Spaces/{sId}/Notes/{Id} (soft delete)."""
     resp = requests.delete(
         f"{BACKEND_URL}/api/WorkSpaces/{workspace_id}/Spaces/{space_id}/Notes/{note_id}",
-        headers=_headers(user_id), timeout=TIMEOUT,
+        headers=_headers(user_id, user_token), timeout=TIMEOUT,
     )
     return _unwrap(resp)
 
@@ -399,40 +415,40 @@ def delete_note(user_id: str, workspace_id, space_id, note_id) -> dict:
 # MEMORY / ANALYTICS / BRIEFING  (doc section 4.1 + 4.4)
 # =====================================================================
 
-def get_memory(user_id: str) -> dict:
+def get_memory(user_id: str, user_token: str = "") -> dict:
     """GET /api/ai/memory"""
-    resp = requests.get(f"{BACKEND_URL}/api/ai/memory", headers=_headers(user_id), timeout=TIMEOUT)
+    resp = requests.get(f"{BACKEND_URL}/api/ai/memory", headers=_headers(user_id, user_token), timeout=TIMEOUT)
     return _unwrap(resp) or {}
 
 
-def save_memory(user_id: str, key: str, value: str) -> dict:
+def save_memory(user_id: str, key: str, value: str, user_token: str = "") -> dict:
     """POST /api/ai/memory"""
     resp = requests.post(
         f"{BACKEND_URL}/api/ai/memory", json={"key": key, "value": value},
-        headers=_headers(user_id), timeout=TIMEOUT,
+        headers=_headers(user_id, user_token), timeout=TIMEOUT,
     )
     return _unwrap(resp)
 
 
-def delete_memory(user_id: str, key: str) -> dict:
+def delete_memory(user_id: str, key: str, user_token: str = "") -> dict:
     """DELETE /api/ai/memory/{key}"""
-    resp = requests.delete(f"{BACKEND_URL}/api/ai/memory/{key}", headers=_headers(user_id), timeout=TIMEOUT)
+    resp = requests.delete(f"{BACKEND_URL}/api/ai/memory/{key}", headers=_headers(user_id, user_token), timeout=TIMEOUT)
     return _unwrap(resp)
 
 
-def get_analytics(user_id: str) -> dict:
+def get_analytics(user_id: str, user_token: str = "") -> dict:
     """GET /api/analytics"""
-    resp = requests.get(f"{BACKEND_URL}/api/analytics", headers=_headers(user_id), timeout=TIMEOUT)
+    resp = requests.get(f"{BACKEND_URL}/api/analytics", headers=_headers(user_id, user_token), timeout=TIMEOUT)
     return _unwrap(resp) or {}
 
 
-def get_briefing(user_id: str) -> dict:
+def get_briefing(user_id: str, user_token: str = "") -> dict:
     """GET /api/ai/briefing"""
-    resp = requests.get(f"{BACKEND_URL}/api/ai/briefing", headers=_headers(user_id), timeout=TIMEOUT)
+    resp = requests.get(f"{BACKEND_URL}/api/ai/briefing", headers=_headers(user_id, user_token), timeout=TIMEOUT)
     return _unwrap(resp) or {}
 
 
-def clear_all(user_id: str) -> dict:
+def clear_all(user_id: str, user_token: str = "") -> dict:
     """
     POST /api/ai/clear
     Confirmed in integration doc v2 section 6.5 (Status: DONE) — atomic
@@ -440,7 +456,7 @@ def clear_all(user_id: str) -> dict:
     """
     if not BACKEND_URL:
         raise BackendError("BACKEND_URL is not configured.")
-    resp = requests.post(f"{BACKEND_URL}/api/ai/clear", headers=_headers(user_id), timeout=TIMEOUT)
+    resp = requests.post(f"{BACKEND_URL}/api/ai/clear", headers=_headers(user_id, user_token), timeout=TIMEOUT)
     return _unwrap(resp)
 
 
@@ -452,15 +468,15 @@ def clear_all(user_id: str) -> dict:
 # expensive, kept only because there's no better option in the spec.
 # =====================================================================
 
-def resolve_task_location(user_id: str, task_id):
+def resolve_task_location(user_id: str, task_id, user_token: str = ""):
     """Returns (workspace_id, space_id) containing task_id, via GET /api/ai/tasks/{taskId}/location. No fallback."""
-    resp = requests.get(f"{BACKEND_URL}/api/ai/tasks/{task_id}/location", headers=_headers(user_id), timeout=TIMEOUT)
+    resp = requests.get(f"{BACKEND_URL}/api/ai/tasks/{task_id}/location", headers=_headers(user_id, user_token), timeout=TIMEOUT)
     data = _unwrap(resp)
     return data["workspaceId"], data["spaceId"]
 
 
-def resolve_note_location(user_id: str, note_id):
+def resolve_note_location(user_id: str, note_id, user_token: str = ""):
     """Returns (workspace_id, space_id) containing note_id, via GET /api/ai/notes/{noteId}/location. No fallback."""
-    resp = requests.get(f"{BACKEND_URL}/api/ai/notes/{note_id}/location", headers=_headers(user_id), timeout=TIMEOUT)
+    resp = requests.get(f"{BACKEND_URL}/api/ai/notes/{note_id}/location", headers=_headers(user_id, user_token), timeout=TIMEOUT)
     data = _unwrap(resp)
     return data["workspaceId"], data["spaceId"]

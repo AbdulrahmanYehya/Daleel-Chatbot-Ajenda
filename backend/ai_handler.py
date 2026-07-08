@@ -158,19 +158,23 @@ class AdkComplexHandler:
         tools_by_name = {f.__name__: f for f in actual_tools}
         
         selected_tools = []
-        mandatory_tools = ["tool_get_context", "db_create_task", "db_create_note", "db_update_task", "db_update_note", "db_delete_task", "db_delete_note", "db_create_project_plan"] 
+        mandatory_tools = ["tool_get_context", "db_create_task", "db_create_note", "db_create_project_plan"] 
         
         for idx in top_indices:
             tool_name = self._tool_metadata[idx]['name']
-            func = tools_by_name[tool_name]
+            func = tools_by_name.get(tool_name)
+            if func is None:
+                logging.warning(f"Skipping missing tool: {tool_name}")
+                continue
             if func not in selected_tools:
                 selected_tools.append(func)
             if len(selected_tools) >= top_k:
                 break
                 
         for func_name in mandatory_tools:
-            func = tools_by_name[func_name]
-            if func not in selected_tools:
+            func = tools_by_name.get(func_name)
+
+            if func and func not in selected_tools:
                 selected_tools.append(func)
                 
         logging.info(f"Dynamically retrieved {len(selected_tools)} tools for this prompt.")
@@ -1112,7 +1116,7 @@ class EnhancedAIHandler:
 
             if intent == "ACTION":
                 if not self.light_action_agent: self.light_action_agent = AdkActionHandler(database)
-                try: return self.light_action_agent.process_message(user_id=user_id, user_message=user_message, language=language, user_token=user_token)
+                try: return self.light_action_agent.process_message(user_id=user_id, user_message=user_message, language=language, user_token=user_token,)
                 except Exception as e: logging.warning(f"Action Agent failed: {e}. Falling back to Complex.")
 
             if not self.heavy_core_agent: self.heavy_core_agent = AdkComplexHandler(database)
