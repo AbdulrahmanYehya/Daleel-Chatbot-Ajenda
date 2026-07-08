@@ -64,7 +64,7 @@ try:
     from google.adk.sessions import InMemorySessionService
     from google.genai import types
     from google import genai 
-    from pydantic import BaseModel, Field
+    from pydantic import BaseModel, Field, ValidationError
     from typing import List, Optional
     ADK_AVAILABLE = True
 except ImportError:
@@ -101,7 +101,7 @@ class TaskPlan(BaseModel):
 
 class SpacePlan(BaseModel):
     name: str = Field(description="Name of the space, phase, or day")
-    tasks: List[TaskPlan] = Field(description="Tasks belonging to this space")
+    tasks: List[TaskPlan] = Field(default_factory=list, description="Tasks belonging to this space")
 
 class WorkspacePlan(BaseModel):
     name: str = Field(description="Name of the overall project or workspace")
@@ -117,8 +117,7 @@ class ProjectPlan(BaseModel):
 # HEAVY AGENT: Handles Complex Planning, Workspaces, and Analytics
 # ======================================================================================
 class AdkComplexHandler:
-    def __init__(self, database):
-        self.db = database
+    def __init__(self):
         self.session_service = InMemorySessionService()
         self.embedder = SentenceTransformer('all-MiniLM-L6-v2')
         self._precompute_tool_embeddings()
@@ -181,8 +180,6 @@ class AdkComplexHandler:
         return selected_tools
 
     def _register_tools(self, user_id: str, user_token: str = ""):
-        db = self.db
-
         def tool_get_context() -> str:
             """Get the user's daily schedule, overdue tasks, and upcoming tasks."""
             return json.dumps(backend_client.get_briefing(user_id, user_token), ensure_ascii=False)
@@ -246,6 +243,19 @@ class AdkComplexHandler:
             # combined ISO `dueDate`. Both are best-effort combined below; if that
             # combination turns out wrong, ask the backend team for the exact
             # expected datetime format.
+            #
+            # DEFENSIVE NOTE: when the model's tool-call args fail ADK's own Pydantic
+            # validation (e.g. a required field missing), ADK falls back to invoking
+            # this function with the raw dict instead of a validated ProjectPlan —
+            # so `plan_data` is not guaranteed to be a ProjectPlan instance here.
+            # Re-validate ourselves and return a FAILED string (which the agent's
+            # SELF-CORRECT instruction will retry against) instead of crashing the
+            # whole tool-call thread with an uncaught AttributeError.
+            if not isinstance(plan_data, ProjectPlan):
+                try:
+                    plan_data = ProjectPlan.model_validate(plan_data)
+                except ValidationError as e:
+                    return f"FAILED: plan_data did not match the expected schema: {e}"
             try:
                 tree = {
                     "workspace": {
@@ -782,7 +792,6 @@ class AdkComplexHandler:
             lang_hint = "\n[LANGUAGE DIRECTIVE: Respond in Arabic. Create all task/note titles in Arabic.]" if bool(re.search(r'[\u0600-\u06FF]', user_message)) or language == 'ar' else "\n[LANGUAGE DIRECTIVE: Respond in English. Create all task/note titles in English.]"
             user_message = user_message + lang_hint + self._build_short_term_context(user_id) + self._detect_urgency_hint(user_message)
 
-            self.db.save_message(user_id, 'user', user_message)
             content = types.Content(role='user', parts=[types.Part.from_text(text=user_message)])
             final_text = "I couldn't generate a response."
 
@@ -834,7 +843,6 @@ class AdkComplexHandler:
                 if not tool_failed:
                     success = True
 
-            self.db.save_message(user_id, 'model', final_text)
             state = _aggregate_state(user_id, user_token)
             return {
                 "response_message": final_text, "tool_events": tool_events, **state,
@@ -849,15 +857,12 @@ class AdkComplexHandler:
 # LIGHTWEIGHT AGENT: The Fast Lane for simple CRUD & Subtasks
 # ======================================================================================
 class AdkActionHandler:
-    def __init__(self, database):
-        self.db = database
+    def __init__(self):
         self.session_service = InMemorySessionService()
         print("ComplexHandler", id(self))
         print("SessionService", id(self.session_service))
 
     def _register_tools(self, user_id: str):
-        db = self.db
-
         def db_find_task_id(search_term: str) -> str:
             """Find the parent_id to create a subtask, or need to update/complete a task."""
             # NOTE: no flat task-listing endpoint exists, so this walks
@@ -1078,7 +1083,7 @@ class EnhancedAIHandler:
             logging.error(f"Routing failed: {e}")
             return "COMPLEX"
 
-    def process_multimodal_message(self, user_message, message_type='text', context_data=None, database=None, language='en', user_id=None, user_token=''):
+    def process_multimodal_message(self, user_message, message_type='text', context_data=None, language='en', user_id=None, user_token=''):
         # CHANGE NOTE: default user_id changed from the hardcoded 'yahya' to None.
         # app.py now rejects requests with no verified X-User-Id before this is ever
         # called, but keeping a real-looking default here would silently mask that
@@ -1089,7 +1094,7 @@ class EnhancedAIHandler:
                 "tool_events": [], "tasks": [], "notes": [], "workspaces": [], "spaces": [],
                 "ai_metadata": {"model_used": "none", "error": "missing_user_id"},
             }
-        if self.use_adk and database:
+        if self.use_adk:
             intent = self._route_intent(user_message)
             logging.info(f"Router classified intent as: {intent} for user {user_id}")
             
@@ -1108,20 +1113,19 @@ class EnhancedAIHandler:
                         config=types.GenerateContentConfig(system_instruction=sys_inst, temperature=0.5)
                     )
                     return {
-                        "response_message": response.text, "tool_events": [], 
-                        "tasks": database.get_tasks(user_id=user_id), "notes": database.get_notes(user_id=user_id),
-                        "workspaces": database.get_workspaces(user_id=user_id), "spaces": database.get_spaces(user_id=user_id),
+                        "response_message": response.text, "tool_events": [],
+                        **_aggregate_state(user_id, user_token),
                         "ai_metadata": {"model_used": "gemini-chat-only"}
                     }
                 except Exception:
                     pass
 
             if intent == "ACTION":
-                if not self.light_action_agent: self.light_action_agent = AdkActionHandler(database)
+                if not self.light_action_agent: self.light_action_agent = AdkActionHandler()
                 try: return self.light_action_agent.process_message(user_id=user_id, user_message=user_message, language=language, user_token=user_token,)
                 except Exception as e: logging.warning(f"Action Agent failed: {e}. Falling back to Complex.")
 
-            if not self.heavy_core_agent: self.heavy_core_agent = AdkComplexHandler(database)
+            if not self.heavy_core_agent: self.heavy_core_agent = AdkComplexHandler()
             try:
                 return self.heavy_core_agent.process_message(
                     user_id=user_id, user_message=user_message, language=language,
@@ -1133,10 +1137,22 @@ class EnhancedAIHandler:
         if message_type == 'document_text':
             text_to_process = context_data if context_data else user_message
             summary, title = self.summarizer.summarize(text_to_process)
-            if database:
-                database.create_note(user_id=user_id, title=f"Summary: {title}", content=summary, category="Documents", language="en")
-                return {"response_message": "Document summarized offline.", "tool_events": [], "tasks": database.get_tasks(user_id=user_id), "notes": database.get_notes(user_id=user_id), "workspaces": database.get_workspaces(user_id=user_id), "spaces": database.get_spaces(user_id=user_id)}
-            return {"response_message": "Database not provided.", "tool_events": [], "tasks": [], "notes": [], "workspaces": [], "spaces": []}
+            try:
+                workspaces = backend_client.get_workspaces(user_id, user_token)
+                if not workspaces:
+                    ws = backend_client.create_workspace(user_id, "General", "", "", user_token)
+                    workspaces = [ws]
+                workspace_id = backend_client._field(workspaces[0], "id")
+                spaces = backend_client.get_spaces(user_id, workspace_id, user_token)
+                if not spaces:
+                    sp = backend_client.create_space(user_id, workspace_id, "General", "", user_token=user_token)
+                    spaces = [sp]
+                space_id = backend_client._field(spaces[0], "id")
+                backend_client.create_note(user_id, workspace_id, space_id, title=f"Summary: {title}", content=summary, user_token=user_token)
+                return {"response_message": "Document summarized offline.", "tool_events": [], **_aggregate_state(user_id, user_token)}
+            except backend_client.BackendError as e:
+                logging.error(f"Offline document summary failed: {e}")
+                return {"response_message": "Couldn't save the document summary right now.", "tool_events": [], "tasks": [], "notes": [], "workspaces": [], "spaces": []}
 
         # CHANGE NOTE: the offline RAG fallback that used to run here
         # (self.enhanced_rag.get_fallback_response) is removed per the integration
@@ -1148,7 +1164,7 @@ class EnhancedAIHandler:
         # it to users as a clear error rather than pretending nothing changed.
         logging.error(
             "No fallback available: ADK/Gemini path did not handle this request "
-            "(use_adk=%s, database_provided=%s).", self.use_adk, bool(database)
+            "(use_adk=%s).", self.use_adk
         )
         return {
             "response_message": (
