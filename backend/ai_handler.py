@@ -1163,7 +1163,7 @@ class EnhancedAIHandler:
         # reduction in resilience versus the old behavior, not a neutral swap — surface
         # it to users as a clear error rather than pretending nothing changed.
         logging.error(
-            "No fallback available: ADK/Gemini path did not handle this request "
+            "No fallback available: ADK/Gemini path did not handle this request"
             "(use_adk=%s).", self.use_adk
         )
         return {
