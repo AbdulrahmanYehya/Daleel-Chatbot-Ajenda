@@ -725,6 +725,9 @@ class AdkComplexHandler:
             
             relevant_tools = self._retrieve_tools(user_id, user_message, top_k=8, user_token=user_token)
             self._build_agent(relevant_tools, user_id, user_message)
+            logging.info(
+                f"AVAILABLE TOOLS -> {[tool.__name__ for tool in relevant_tools]}"
+            )
 
             if message_type == 'document_text' and context_data:
                 max_chars = 12000
@@ -750,10 +753,22 @@ class AdkComplexHandler:
                     if hasattr(event, 'content') and event.content:
                         for part in getattr(event.content, 'parts', []):
                             if hasattr(part, 'function_call') and part.function_call:
-                                tool_events.append({"type": "tool_call", "name": part.function_call.name, "args": dict(part.function_call.args)})
+
+                                logging.info(
+                                    f"TOOL CALL -> {part.function_call.name} | args={dict(part.function_call.args)}"
+                                )
+
+                                tool_events.append({
+                                    "type": "tool_call",
+                                    "name": part.function_call.name,
+                                    "args": dict(part.function_call.args)
+                                })
                             
                             elif hasattr(part, 'function_response') and part.function_response:
                                 result_str = str(part.function_response.response)
+                                logging.info(
+                                    f"TOOL RESULT -> {part.function_response.name} | {result_str}"
+                                )
                                 tool_events.append({"type": "tool_result", "name": part.function_response.name, "result": result_str[:300]})
                                 
                                 result_lower = result_str.lower()
@@ -765,6 +780,7 @@ class AdkComplexHandler:
                                     break 
                                     
                             elif hasattr(part, 'text') and part.text:
+                                logging.info(f"MODEL SAID -> {part.text}")
                                 final_text = part.text
                     
                     if tool_failed:
