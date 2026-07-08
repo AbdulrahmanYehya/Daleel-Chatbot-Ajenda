@@ -84,28 +84,23 @@ def _field(obj: dict, *names, default=None):
 
 def priority_to_int(priority: str) -> int:
     """
-    ASSUMPTION, NOT CONFIRMED: the addendum's payload schemas want priority
-    as an int (`"priority": 1`) but never define what the integers mean.
-    Mapping high=1 / medium=2 / low=3 (1 = most urgent) until backend
-    confirms the actual scale.
+    CONFIRMED (backend spec, this pass): 0=Low, 1=Medium, 2=High, 3=Critical.
+    NOTE: this replaces the old high=1/medium=2/low=3 guess — flagged to the
+    team as a breaking change since it affects every existing task-creation
+    call site. Do not revert without re-confirming which mapping is live.
     """
-    return {"high": 1, "medium": 2, "low": 3}.get((priority or "medium").lower(), 2)
+    return {"low": 0, "medium": 1, "high": 2, "critical": 3}.get((priority or "medium").lower(), 1)
 
 
 def create_quick_task(user_id: str, title: str, description: str = "", due_date: str = "",
                        due_time: str = "", priority: str = "medium") -> dict:
     """
     POST /api/ai/tasks/quick
-    For flat, single-step task commands that name no explicit workspace/space
-    (e.g. "buy milk tomorrow"). The gateway auto-resolves/creates a per-user
-    "Inbox" container and commits the task there.
-
-    CHANGE NOTE: dueDate/dueTime now sent camelCase per the .NET team's
-    QuickTaskRequest DTO update ([JsonPropertyName("dueDate")] /
-    [JsonPropertyName("dueTime")]). This is scoped to this endpoint only —
-    /api/ai/projects/persist stays snake_case (workspace_name, due_date,
-    due_time, etc.) since that contract was separately confirmed with its
-    own DTOs and was never part of this casing change.
+    CONFIRMED (backend spec, this pass): body is snake_case, NOT camelCase —
+    overturns the earlier "dueDate/dueTime camelCase DTO" note. due_date is
+    full ISO datetime with Z (e.g. "2026-07-12T00:00:00Z"), due_time is a
+    12-hour string with AM/PM (e.g. "09:00 AM"). Recurrence is explicitly
+    unsupported — do not send it.
     """
     if not BACKEND_URL:
         raise BackendError("BACKEND_URL is not configured.")
@@ -114,12 +109,95 @@ def create_quick_task(user_id: str, title: str, description: str = "", due_date:
         json={
             "title": title,
             "description": description or None,
-            "dueDate": due_date or None,
-            "dueTime": due_time or None,
+            "due_date": due_date or None,
+            "due_time": due_time or None,
             "priority": priority_to_int(priority),
         },
         headers=_headers(user_id),
         timeout=TIMEOUT,
+    )
+    return _unwrap(resp)
+
+
+def create_workspace(user_id: str, name: str, description: str = "", color: str = "") -> dict:
+    """POST /api/ai/workspaces — confirmed standalone workspace create."""
+    if not BACKEND_URL:
+        raise BackendError("BACKEND_URL is not configured.")
+    resp = requests.post(
+        f"{BACKEND_URL}/api/ai/workspaces",
+        json={"name": name, "description": description, "color": color},
+        headers=_headers(user_id), timeout=TIMEOUT,
+    )
+    return _unwrap(resp)
+
+
+def create_space(user_id: str, workspace_id, name: str, description: str = "",
+                  icon_code: str = "", is_public: bool = True) -> dict:
+    """POST /api/ai/workspaces/{workspaceId}/spaces — confirmed standalone space create."""
+    if not BACKEND_URL:
+        raise BackendError("BACKEND_URL is not configured.")
+    resp = requests.post(
+        f"{BACKEND_URL}/api/ai/workspaces/{workspace_id}/spaces",
+        json={"name": name, "description": description, "iconCode": icon_code, "isPublic": is_public},
+        headers=_headers(user_id), timeout=TIMEOUT,
+    )
+    return _unwrap(resp)
+
+
+def create_subtask(user_id: str, workspace_id, space_id, task_id, title: str) -> dict:
+    """POST /api/ai/workspaces/{wId}/spaces/{sId}/tasks/{tId}/subtasks — confirmed, scoped path."""
+    if not BACKEND_URL:
+        raise BackendError("BACKEND_URL is not configured.")
+    resp = requests.post(
+        f"{BACKEND_URL}/api/ai/workspaces/{workspace_id}/spaces/{space_id}/tasks/{task_id}/subtasks",
+        json={"title": title},
+        headers=_headers(user_id), timeout=TIMEOUT,
+    )
+    return _unwrap(resp)
+
+
+def link_note_to_task(user_id: str, task_id, note_id) -> dict:
+    """
+    POST /api/ai/tasks/{taskId}/links/notes/{noteId} — no body.
+    CONFIRMED: this is the ONLY note-related AI capability. There is no
+    create-note, update-note, or delete-note route in the AI controller —
+    notes are owned entirely by the frontend/general backend. Do not add
+    those functions back without a new confirmed spec.
+    """
+    if not BACKEND_URL:
+        raise BackendError("BACKEND_URL is not configured.")
+    resp = requests.post(
+        f"{BACKEND_URL}/api/ai/tasks/{task_id}/links/notes/{note_id}",
+        headers=_headers(user_id), timeout=TIMEOUT,
+    )
+    return _unwrap(resp)
+
+
+def persist_tree(user_id: str, tree: dict) -> dict:
+    """
+    POST /api/ai/tree — confirmed to exist, schema:
+    {
+      "workspace": {
+        "name": str, "description": str,
+        "spaces": [{
+          "name": str, "description": str, "iconCode": str,
+          "tasks": [{
+            "title": str, "description": str, "dueDate": str,  # ISO datetime
+            "subtasks": [{"title": str, "isCompleted": bool}]
+          }]
+        }]
+      }
+    }
+    UNRESOLVED: this looks like it does the same job as persist_project_plan()
+    below (atomic workspace+spaces+tasks+subtasks creation) but with a
+    different shape and path. Confirm with the backend team whether this
+    replaces persist_project_plan or the two coexist for different cases
+    before wiring the agent's tree-generation tool to one or the other.
+    """
+    if not BACKEND_URL:
+        raise BackendError("BACKEND_URL is not configured.")
+    resp = requests.post(
+        f"{BACKEND_URL}/api/ai/tree", json=tree, headers=_headers(user_id), timeout=TIMEOUT,
     )
     return _unwrap(resp)
 
@@ -352,6 +430,18 @@ def get_briefing(user_id: str) -> dict:
     """GET /api/ai/briefing"""
     resp = requests.get(f"{BACKEND_URL}/api/ai/briefing", headers=_headers(user_id), timeout=TIMEOUT)
     return _unwrap(resp) or {}
+
+
+def clear_all(user_id: str) -> dict:
+    """
+    POST /api/ai/clear
+    Confirmed in integration doc v2 section 6.5 (Status: DONE) — atomic
+    cascade wipe of all tasks/notes/subtasks/workspaces for the user.
+    """
+    if not BACKEND_URL:
+        raise BackendError("BACKEND_URL is not configured.")
+    resp = requests.post(f"{BACKEND_URL}/api/ai/clear", headers=_headers(user_id), timeout=TIMEOUT)
+    return _unwrap(resp)
 
 
 # =====================================================================

@@ -608,15 +608,16 @@ class Database:
     # =====================================================================
     def clear_all(self, user_id):
         with self._get_conn() as conn:
-            conn.executescript(f"""
-                DELETE FROM tasks WHERE user_id='{user_id}'; 
-                DELETE FROM notes WHERE user_id='{user_id}'; 
-                DELETE FROM spaces WHERE user_id='{user_id}';
-                DELETE FROM workspaces WHERE user_id='{user_id}'; 
-                DELETE FROM user_memory WHERE user_id='{user_id}';
-                DELETE FROM conversation_history WHERE user_id='{user_id}';
-                UPDATE analytics SET total_tasks_created=0, total_notes_created=0, last_activity=NULL WHERE user_id='{user_id}';
-            """)
+            conn.execute("DELETE FROM tasks WHERE user_id=?", (user_id,))
+            conn.execute("DELETE FROM notes WHERE user_id=?", (user_id,))
+            conn.execute("DELETE FROM spaces WHERE user_id=?", (user_id,))
+            conn.execute("DELETE FROM workspaces WHERE user_id=?", (user_id,))
+            conn.execute("DELETE FROM user_memory WHERE user_id=?", (user_id,))
+            conn.execute("DELETE FROM conversation_history WHERE user_id=?", (user_id,))
+            conn.execute(
+                "UPDATE analytics SET total_tasks_created=0, total_notes_created=0, last_activity=NULL WHERE user_id=?",
+                (user_id,)
+            )
 
     def get_analytics(self, user_id):
         tasks = self.get_tasks(user_id=user_id, include_subtasks=False)

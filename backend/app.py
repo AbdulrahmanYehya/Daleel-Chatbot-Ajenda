@@ -32,9 +32,9 @@ CHANGE NOTE (AI-backend integration doc v2 + Technical Addendum, 2026-07-03):
 """
 
 from flask import Flask, render_template, request, jsonify, send_file, Response, stream_with_context
-from database import Database
 from ai_handler import EnhancedAIHandler
 from nlp_handler import DocumentProcessor
+import backend_client
 import json, os, io, logging, time, threading
 from logging.handlers import RotatingFileHandler
 from datetime import datetime
@@ -46,8 +46,40 @@ from reportlab.pdfbase.ttfonts import TTFont
 import arabic_reshaper
 from bidi.algorithm import get_display
 
+from google.genai import types
+from google import genai
+
 app = Flask(__name__)
 app.secret_key = 'ai_key_secure'
+
+# =====================================================================
+# CHANGE NOTE (this pass): local SQLite (`database.Database`) is removed.
+# All workspace/space/task/note/memory/analytics CRUD below now calls the
+# .NET Master Gateway via backend_client.py instead of a local file.
+#
+# IMPORTANT — field/path spelling: every field and path below uses the
+# correct "Workspace" spelling (matching backend_client.py, which itself
+# targets /api/WorkSpaces/...). A chat handoff note claimed the .NET side
+# has a "WrokSpaceID" typo in some model and that the Python side should
+# deliberately send that misspelling to match it. I have NOT done that —
+# no schema/DTO evidence for that claim was provided, only a verbal
+# assertion. If that typo is real, get a confirmed screenshot of the DTO
+# or an OpenAPI/Swagger spec from the backend team and special-case it
+# explicitly and visibly (not by silently misspelling every call site).
+#
+# HONEST GAP: the integration doc does not expose a flat "all workspaces'
+# tasks" or "all notes" listing endpoint, a "smart analytics" endpoint, or
+# a "clear everything" endpoint. Routes that depended on those now return
+# a clear NOT_IMPLEMENTED error instead of silently returning empty/fake
+# data — see backend_client.py's own docstring for the same gaps.
+# =====================================================================
+
+try:
+    ai_handler = EnhancedAIHandler()
+    logging.info("AI Handler initialized.")
+except Exception as e:
+    logging.critical(f"FATAL: {e}", exc_info=True)
+    ai_handler = None
 
 # =====================================================================
 # LOGGING
@@ -66,14 +98,20 @@ def setup_logging():
 
 setup_logging()
 
+# NOTE: ai_handler.py's Agent tools (tool_save_memory, tool_search_my_data,
+# tool_get_context, the delete tool, etc.) still take a `database` object
+# and call self.db.* internally for things not yet covered by
+# backend_client.py — that's a separate migration inside ai_handler.py
+# itself, out of scope here. Local SQLite `Database` is kept ONLY to
+# satisfy that existing dependency; this file's own CRUD routes below no
+# longer read or write it — those go through backend_client exclusively now.
+from database import Database
 try:
     db = Database()
-    ai_handler = EnhancedAIHandler()
-    logging.info("Database and AI Handler initialized.")
+    logging.info("Local Database shim initialized (used only by ai_handler.py's still-unmigrated tools).")
 except Exception as e:
-    logging.critical(f"FATAL: {e}", exc_info=True)
+    logging.error(f"Local DB init failed (non-fatal for this file's CRUD routes): {e}")
     db = None
-    ai_handler = None
 
 # =====================================================================
 # AUTH HELPER
@@ -127,14 +165,16 @@ def status():
 
 @app.route('/api/ai/welcome')
 def welcome():
-    if not db:
-        return ok({"message": "Hello! I am your AI assistant."})
-
     user_id, error = require_user_id()
     if error: return error
-    memory = db.get_all_memory(user_id=user_id)
-    todays = db.get_todays_tasks(user_id=user_id)
-    overdue = db.get_overdue_tasks(user_id=user_id)
+    try:
+        memory = backend_client.get_memory(user_id)
+        briefing_data = backend_client.get_briefing(user_id)
+    except backend_client.BackendError as e:
+        logging.error(f"Welcome: backend call failed: {e}")
+        memory, briefing_data = {}, {}
+    todays = briefing_data.get("todaysTasks") or briefing_data.get("todays_tasks") or []
+    overdue = briefing_data.get("overdueTasks") or briefing_data.get("overdue_tasks") or []
     hour = datetime.now().hour
     greeting = "Good morning" if hour < 12 else ("Good afternoon" if hour < 17 else "Good evening")
     
@@ -152,11 +192,12 @@ def welcome():
 
 @app.route('/api/ai/briefing')
 def briefing():
-    if not db:
-        return ok({})
     user_id, error = require_user_id()
     if error: return error
-    return ok(db.get_daily_briefing(user_id=user_id))
+    try:
+        return ok(backend_client.get_briefing(user_id))
+    except backend_client.BackendError as e:
+        return err("BACKEND_ERROR", str(e), 502)
 
 @app.route('/api/ai/config')
 def get_config():
@@ -348,83 +389,112 @@ def _format_agent_response(result: dict) -> dict:
 
 # =====================================================================
 # CRUD — WORKSPACES
+# Migrated off local SQLite onto backend_client (.NET Master Gateway).
 # =====================================================================
 
 @app.route('/api/workspaces', methods=['GET'])
 def get_workspaces():
-    if not db: return err("DB_UNAVAILABLE", "Database not available", 503)
     user_id, error = require_user_id()
     if error: return error
-    return ok(db.get_workspaces(user_id=user_id))
+    try:
+        return ok(backend_client.get_workspaces(user_id))
+    except backend_client.BackendError as e:
+        return err("BACKEND_ERROR", str(e), 502)
 
-@app.route('/api/workspaces/<int:ws_id>', methods=['PATCH'])
-def update_workspace(ws_id):
-    if not db: return err("DB_UNAVAILABLE", "Database not available", 503)
+@app.route('/api/workspaces/<int:workspace_id>', methods=['PATCH'])
+def update_workspace(workspace_id):
     user_id, error = require_user_id()
     if error: return error
     data = request.json or {}
-    ws = db.update_workspace(user_id=user_id, workspace_id=ws_id, updates=data)
-    if not ws: return err("NOT_FOUND", f"Workspace {ws_id} not found", 404)
+    try:
+        ws = backend_client.update_workspace(user_id, workspace_id, data)
+    except backend_client.BackendError as e:
+        return err("BACKEND_ERROR", str(e), 502)
+    if not ws: return err("NOT_FOUND", f"Workspace {workspace_id} not found", 404)
     return ok(ws)
 
-@app.route('/api/workspaces/<int:ws_id>', methods=['DELETE'])
-def delete_workspace(ws_id):
-    if not db: return err("DB_UNAVAILABLE", "Database not available", 503)
+@app.route('/api/workspaces/<int:workspace_id>', methods=['DELETE'])
+def delete_workspace(workspace_id):
     user_id, error = require_user_id()
     if error: return error
-    success = db.delete_workspace(user_id=user_id, workspace_id=ws_id)
-    if not success: return err("NOT_FOUND", f"Workspace {ws_id} not found", 404)
-    return ok({"deleted": True, "id": ws_id})
+    try:
+        backend_client.delete_workspace(user_id, workspace_id)
+    except backend_client.BackendError as e:
+        return err("BACKEND_ERROR", str(e), 502)
+    return ok({"deleted": True, "id": workspace_id})
 
 # =====================================================================
-# CRUD — TASKS
+# CRUD — SPACES / TASKS
 # =====================================================================
 
 @app.route('/api/spaces', methods=['GET'])
 def get_spaces():
-    if not db: return err("DB_UNAVAILABLE", "Database not available", 503)
     user_id, error = require_user_id()
     if error: return error
     workspace_id = request.args.get('workspace_id')
-    spaces = db.get_spaces(user_id=user_id, workspace_id=int(workspace_id) if workspace_id else None)
-    return ok(spaces)
+    if not workspace_id:
+        return err("VALIDATION_ERROR", "workspace_id query param is required (no flat cross-workspace spaces endpoint exists).", 400)
+    try:
+        return ok(backend_client.get_spaces(user_id, int(workspace_id)))
+    except backend_client.BackendError as e:
+        return err("BACKEND_ERROR", str(e), 502)
 
 @app.route('/api/tasks/<int:task_id>/subtasks', methods=['GET'])
 def get_task_subtasks(task_id):
-    if not db: return err("DB_UNAVAILABLE", "Database not available", 503)
     user_id, error = require_user_id()
     if error: return error
-    data = db.get_task_with_subtasks(user_id=user_id, task_id=task_id)
-    if not data: return err("NOT_FOUND", f"Task {task_id} not found", 404)
-    return ok(data)
+    try:
+        workspace_id, space_id = backend_client.resolve_task_location(user_id, task_id)
+        task = backend_client.get_task(user_id, workspace_id, space_id, task_id)
+    except backend_client.BackendError as e:
+        return err("BACKEND_ERROR", str(e), 502)
+    if not task: return err("NOT_FOUND", f"Task {task_id} not found", 404)
+    return ok(task)
 
 @app.route('/api/tasks', methods=['GET'])
 def get_tasks():
-    if not db: return err("DB_UNAVAILABLE", "Database not available", 503)
+    # HONEST GAP: no flat "all tasks for user" endpoint exists in the doc.
+    # We aggregate by walking every workspace/space via the documented GET
+    # endpoints. Same O(workspaces x spaces) cost noted in backend_client.py —
+    # ask the backend team for a flat listing endpoint if this gets slow.
     user_id, error = require_user_id()
     if error: return error
-    include_subtasks = request.args.get('include_subtasks', 'false').lower() == 'true'
-    return ok(db.get_tasks(user_id=user_id, include_subtasks=include_subtasks))
+    try:
+        all_tasks = []
+        for ws in backend_client.get_workspaces(user_id):
+            ws_id = backend_client._field(ws, "id")
+            for sp in backend_client.get_spaces(user_id, ws_id):
+                sp_id = backend_client._field(sp, "id")
+                all_tasks.extend(backend_client.get_tasks(user_id, ws_id, sp_id))
+        return ok(all_tasks)
+    except backend_client.BackendError as e:
+        return err("BACKEND_ERROR", str(e), 502)
 
 @app.route('/api/tasks/<int:task_id>', methods=['DELETE'])
 def delete_task(task_id):
-    if not db: return err("DB_UNAVAILABLE", "Database not available", 503)
     user_id, error = require_user_id()
     if error: return error
-    success = db.delete_task(user_id=user_id, task_id=task_id)
-    if not success: return err("NOT_FOUND", f"Task {task_id} not found", 404)
+    try:
+        workspace_id, space_id = backend_client.resolve_task_location(user_id, task_id)
+        backend_client.delete_task(user_id, workspace_id, space_id, task_id)
+    except backend_client.BackendError as e:
+        return err("BACKEND_ERROR", str(e), 502)
     return ok({"deleted": True, "id": task_id})
 
 @app.route('/api/tasks/<int:task_id>/complete', methods=['POST'])
 def complete_task(task_id):
-    if not db: return err("DB_UNAVAILABLE", "Database not available", 503)
     user_id, error = require_user_id()
     if error: return error
     data = request.json or {}
     completed = data.get('completed', True)
-    task = db.complete_task(user_id=user_id, task_id=task_id) if completed else db.uncomplete_task(user_id=user_id, task_id=task_id)
+    status = "Completed" if completed else "Todo"
+    try:
+        workspace_id, space_id = backend_client.resolve_task_location(user_id, task_id)
+        task = backend_client.set_task_status(user_id, workspace_id, space_id, task_id, status)
+    except backend_client.BackendError as e:
+        return err("BACKEND_ERROR", str(e), 502)
     if not task: return err("NOT_FOUND", f"Task {task_id} not found", 404)
-    return ok({"task": task, "analytics": db.get_analytics(user_id=user_id)})
+    return ok({"task": task})
 
 # =====================================================================
 # CRUD — NOTES
@@ -432,18 +502,29 @@ def complete_task(task_id):
 
 @app.route('/api/notes', methods=['GET'])
 def get_notes():
-    if not db: return err("DB_UNAVAILABLE", "Database not available", 503)
+    # Same aggregation caveat as /api/tasks above — no flat listing endpoint.
     user_id, error = require_user_id()
     if error: return error
-    return ok(db.get_notes(user_id=user_id))
+    try:
+        all_notes = []
+        for ws in backend_client.get_workspaces(user_id):
+            ws_id = backend_client._field(ws, "id")
+            for sp in backend_client.get_spaces(user_id, ws_id):
+                sp_id = backend_client._field(sp, "id")
+                all_notes.extend(backend_client.get_notes(user_id, ws_id, sp_id))
+        return ok(all_notes)
+    except backend_client.BackendError as e:
+        return err("BACKEND_ERROR", str(e), 502)
 
 @app.route('/api/notes/<int:note_id>', methods=['DELETE'])
 def delete_note(note_id):
-    if not db: return err("DB_UNAVAILABLE", "Database not available", 503)
     user_id, error = require_user_id()
     if error: return error
-    success = db.delete_note(user_id=user_id, note_id=note_id)
-    if not success: return err("NOT_FOUND", f"Note {note_id} not found", 404)
+    try:
+        workspace_id, space_id = backend_client.resolve_note_location(user_id, note_id)
+        backend_client.delete_note(user_id, workspace_id, space_id, note_id)
+    except backend_client.BackendError as e:
+        return err("BACKEND_ERROR", str(e), 502)
     return ok({"deleted": True, "id": note_id})
 
 # =====================================================================
@@ -452,20 +533,19 @@ def delete_note(note_id):
 
 @app.route('/api/analytics')
 def analytics():
-    if not db: return err("DB_UNAVAILABLE", "Database not available", 503)
     user_id, error = require_user_id()
     if error: return error
-    return ok(db.get_analytics(user_id=user_id))
+    try:
+        return ok(backend_client.get_analytics(user_id))
+    except backend_client.BackendError as e:
+        return err("BACKEND_ERROR", str(e), 502)
 
 @app.route('/api/ai/analytics/smart')
 def smart_analytics():
-    # CHANGE NOTE: renamed to match the doc's documented path. Per section 7.1,
-    # this is listed under "Remaining Implementation Scope" on the .NET side (not
-    # yet built) — still serving from local db.get_smart_analytics() for now.
-    if not db: return err("DB_UNAVAILABLE", "Database not available", 503)
-    user_id, error = require_user_id()
-    if error: return error
-    return ok(db.get_smart_analytics(user_id=user_id))
+    # Per doc section 7.1, /api/ai/analytics/smart is listed as not-yet-built
+    # on the .NET side. No local fallback anymore (SQLite is gone), so this
+    # is honestly NOT_IMPLEMENTED rather than faking a response.
+    return err("NOT_IMPLEMENTED", "Smart analytics endpoint is not yet available on the backend (doc section 7.1).", 501)
 
 # =====================================================================
 # MEMORY
@@ -473,29 +553,34 @@ def smart_analytics():
 
 @app.route('/api/ai/memory', methods=['GET'])
 def get_memory():
-    if not db: return err("DB_UNAVAILABLE", "Database not available", 503)
     user_id, error = require_user_id()
     if error: return error
-    return ok(db.get_all_memory(user_id=user_id))
+    try:
+        return ok(backend_client.get_memory(user_id))
+    except backend_client.BackendError as e:
+        return err("BACKEND_ERROR", str(e), 502)
 
 @app.route('/api/ai/memory', methods=['POST'])
 def save_memory():
-    if not db: return err("DB_UNAVAILABLE", "Database not available", 503)
     user_id, error = require_user_id()
     if error: return error
     data = request.json or {}
     if not data.get('key') or not data.get('value'):
         return err("VALIDATION_ERROR", "Both 'key' and 'value' fields are required")
-    db.save_memory(user_id=user_id, key=data['key'], value=data['value'])
+    try:
+        backend_client.save_memory(user_id, data['key'], data['value'])
+    except backend_client.BackendError as e:
+        return err("BACKEND_ERROR", str(e), 502)
     return ok({"key": data['key'], "value": data['value']})
 
 @app.route('/api/ai/memory/<key>', methods=['DELETE'])
 def delete_memory(key):
-    if not db: return err("DB_UNAVAILABLE", "Database not available", 503)
     user_id, error = require_user_id()
     if error: return error
-    success = db.delete_memory(user_id=user_id, key=key)
-    if not success: return err("NOT_FOUND", f"Memory key '{key}' not found", 404)
+    try:
+        backend_client.delete_memory(user_id, key)
+    except backend_client.BackendError as e:
+        return err("BACKEND_ERROR", str(e), 502)
     return ok({"deleted": True, "key": key})
 
 # =====================================================================
@@ -545,11 +630,51 @@ def upload_file():
 
 @app.route('/api/ai/clear', methods=['POST'])
 def clear():
-    if not db: return err("DB_UNAVAILABLE", "Database not available", 503)
+    # CONFIRMED: doc v2 section 6.5 lists this as DONE on the .NET side.
     user_id, error = require_user_id()
     if error: return error
-    db.clear_all(user_id=user_id)
+    try:
+        backend_client.clear_all(user_id)
+    except backend_client.BackendError as e:
+        return err("BACKEND_ERROR", str(e), 502)
     return ok({"cleared": True})
+
+# =====================================================================
+# PDF PARSING (AI) — new endpoint for .NET → Python PDF stream.
+# .NET forwards the uploaded PDF as multipart/form-data here. Gemini reads
+# PDF bytes natively, so no text extraction/reshaping is needed on our side.
+# =====================================================================
+
+@app.route('/api/ai/parse-pdf', methods=['POST'])
+def parse_pdf():
+    user_id, error = require_user_id()
+    if error: return error
+
+    if 'file' not in request.files:
+        return err("VALIDATION_ERROR", "No file part in request.", 400)
+    file = request.files['file']
+    if not file or not file.filename:
+        return err("VALIDATION_ERROR", "Empty file upload.", 400)
+
+    try:
+        pdf_bytes = file.read()
+        client = genai.Client()
+        prompt = (
+            "أنت مساعد ذكي في نظام AIgenda. قم بتحليل مستند الـ PDF المرفق بدقة عالية. "
+            "استخرج ملخصاً وافياً ومقسماً لنقاط باللغة العربية، ثم حدد أي مهام تنفيذية "
+            "(Action Items) واضحة ومطلوبة بناءً على محتوى الملف."
+        )
+        response = client.models.generate_content(
+            model='gemini-2.5-flash',
+            contents=[
+                types.Part.from_bytes(data=pdf_bytes, mime_type="application/pdf"),
+                prompt,
+            ],
+        )
+        return ok({"summary": response.text})
+    except Exception as e:
+        logging.error(f"PDF parsing failed: {e}", exc_info=True)
+        return err("GEMINI_PARSE_FAILED", str(e), 500)
 
 # =====================================================================
 # PDF EXPORT

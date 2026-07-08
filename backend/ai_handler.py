@@ -18,6 +18,32 @@ import requests
 
 BACKEND_URL = os.getenv("BACKEND_URL")
 
+
+def _aggregate_state(user_id: str) -> dict:
+    """
+    Reconstructs {tasks, notes, workspaces, spaces} for the frontend's
+    post-turn state refresh. No flat "all tasks/notes" endpoint exists
+    (confirmed gap — see backend_client.py), so this walks every
+    workspace/space via the documented GET endpoints. Costs
+    O(workspaces x spaces) HTTP calls; ask the backend team for a flat
+    listing endpoint if this becomes a bottleneck.
+    """
+    try:
+        workspaces = backend_client.get_workspaces(user_id)
+        all_spaces, all_tasks, all_notes = [], [], []
+        for ws in workspaces:
+            ws_id = backend_client._field(ws, "id")
+            spaces = backend_client.get_spaces(user_id, ws_id)
+            all_spaces.extend(spaces)
+            for sp in spaces:
+                sp_id = backend_client._field(sp, "id")
+                all_tasks.extend(backend_client.get_tasks(user_id, ws_id, sp_id))
+                all_notes.extend(backend_client.get_notes(user_id, ws_id, sp_id))
+        return {"tasks": all_tasks, "notes": all_notes, "workspaces": workspaces, "spaces": all_spaces}
+    except backend_client.BackendError as e:
+        logging.error(f"State aggregation failed: {e}")
+        return {"tasks": [], "notes": [], "workspaces": [], "spaces": []}
+
 # ======================================================================================
 # CHANGE NOTE (AI-backend integration doc v2 + Technical Addendum, 2026-07-03):
 # The offline Sentence-Transformer RAG fallback (rag_handler.EnhancedRAGHandler) is
@@ -151,30 +177,28 @@ class AdkComplexHandler:
 
         def tool_get_context() -> str:
             """Get the user's daily schedule, overdue tasks, and upcoming tasks."""
-            return json.dumps({
-                "now": datetime.now().strftime('%Y-%m-%d %H:%M'),
-                "day_of_week": datetime.now().strftime('%A'),
-                "todays_tasks": db.get_todays_tasks(user_id=user_id),
-                "overdue_tasks": db.get_overdue_tasks(user_id=user_id),
-                "upcoming_tasks": db.get_upcoming_tasks(user_id=user_id, days=3),
-            }, ensure_ascii=False)
+            return json.dumps(backend_client.get_briefing(user_id), ensure_ascii=False)
 
         def tool_daily_briefing() -> str:
             """Generate a daily briefing, morning report, or daily summary."""
-            return json.dumps(db.get_daily_briefing(user_id=user_id), ensure_ascii=False)
+            return json.dumps(backend_client.get_briefing(user_id), ensure_ascii=False)
 
         def tool_save_memory(key: str, value: str) -> str:
             """Remember facts, user preferences, habits, or personal data permanently."""
             try:
-                db.save_memory(user_id=user_id, key=key, value=value)
+                backend_client.save_memory(user_id, key, value)
                 return f"Remembered: {key} = {value}"
-            except Exception as e:
+            except backend_client.BackendError as e:
                 return f"FAILED: Could not save memory. Error: {e}"
 
         def tool_get_memory(key: str) -> str:
             """Retrieve specific saved memories or preferences about the user."""
-            val = db.get_memory(user_id=user_id, key=key)
-            return val if val else f"FAILED: No memory found for key '{key}'"
+            try:
+                mem = backend_client.get_memory(user_id)
+                val = backend_client._field(mem, key) or mem.get(key)
+                return val if val else f"FAILED: No memory found for key '{key}'"
+            except backend_client.BackendError as e:
+                return f"FAILED: Could not retrieve memory. Error: {e}"
 
         def tool_web_search(query: str) -> str:
             """Search the internet for external facts, news, or research."""
@@ -186,192 +210,179 @@ class AdkComplexHandler:
             except Exception as e:
                 return f"FAILED: Web search error: {e}"
 
-        def tool_search_my_data(query: str, item_type: str = "all") -> str:
-            """Search the internal database for existing tasks, notes, or projects."""
-            return json.dumps(db.search_data(user_id=user_id, query=query, item_type=item_type), ensure_ascii=False)
-
-        def tool_check_schedule(date: str, time: str) -> str:
-            """Check if a specific time slot is free or conflicts with existing tasks."""
-            return db.check_schedule_conflict(user_id=user_id, check_date=date, check_time=time)
+        # REMOVED (confirmed permanently out of MVP scope, not just "not built yet"):
+        #   tool_search_my_data — no cross-item search endpoint exists or is planned.
+        #   tool_check_schedule — no schedule-conflict endpoint exists or is planned.
+        # These are intentionally not registered below so the model never attempts them.
 
         def tool_analyze_productivity() -> str:
-            """Get statistics, analytics, and habits about completed tasks and procrastination."""
+            """Get statistics and analytics about tasks and notes."""
+            # NOTE: only the general /api/analytics endpoint is confirmed available to
+            # the AI. "Smart" analytics (procrastination index, streaks, etc.) is still
+            # listed as not-yet-built per doc section 7.1 — no confirmed AI-facing path.
             try:
-                data = db.get_smart_analytics(user_id=user_id)
+                data = backend_client.get_analytics(user_id)
                 return json.dumps(data, ensure_ascii=False)
-            except Exception as e:
+            except backend_client.BackendError as e:
                 return f"FAILED: Could not analyze productivity. Error: {e}"
 
         def db_create_project_plan(plan_data: ProjectPlan) -> str:
             """
             CRITICAL: USE THIS TOOL FOR ANY REQUEST TO PLAN A TRIP, STUDY SCHEDULE, OR COMPLEX PROJECT.
-            Creates a full workspace, spaces, tasks, and subtasks perfectly structured using Pydantic.
+            Creates a full workspace, spaces, tasks, and subtasks in one atomic call.
             """
-            # CHANGE NOTE (Technical Amendment AI2.1): the persist schema was expanded
-            # to carry workspace_description, workspace_color, and per-task
-            # description/due_date/due_time — the earlier data-loss gap is closed.
-            # Every field the ProjectPlan pydantic model captures is now forwarded.
+            # CHANGE NOTE: now targets the CONFIRMED POST /api/ai/tree endpoint
+            # (doc v2 section 6.4, "PersistAgentTreeAsync", status DONE) instead of
+            # the earlier assumed /api/ai/projects/persist path. The tree schema does
+            # NOT carry priority or a separate due_time field — only a single
+            # combined ISO `dueDate`. Both are best-effort combined below; if that
+            # combination turns out wrong, ask the backend team for the exact
+            # expected datetime format.
             try:
+                tree = {
+                    "workspace": {
+                        "name": plan_data.workspace.name,
+                        "description": plan_data.workspace.description,
+                        "spaces": [
+                            {
+                                "name": space.name,
+                                "description": "",
+                                "iconCode": "",
+                                "tasks": [
+                                    {
+                                        "title": task.title,
+                                        "description": task.description,
+                                        "dueDate": (f"{task.due_date}T{task.due_time or '00:00'}:00Z"
+                                                    if task.due_date else None),
+                                        "subtasks": [{"title": st.title, "isCompleted": False} for st in task.subtasks],
+                                    }
+                                    for task in space.tasks
+                                ],
+                            }
+                            for space in plan_data.spaces
+                        ],
+                    }
+                }
+                result = backend_client.persist_tree(user_id, tree)
                 tasks_created = sum(len(s.tasks) for s in plan_data.spaces)
                 subtasks_created = sum(len(t.subtasks) for s in plan_data.spaces for t in s.tasks)
-
-                payload = {
-                    "workspace_name": plan_data.workspace.name,
-                    "workspace_description": plan_data.workspace.description,
-                    "workspace_color": plan_data.workspace.color,
-                    "spaces": [
-                        {
-                            "space_name": space.name,
-                            "tasks": [
-                                {
-                                    "title": task.title,
-                                    "description": task.description,
-                                    "due_date": task.due_date,
-                                    "due_time": task.due_time,
-                                    "priority": backend_client.priority_to_int(task.priority),
-                                    "subtasks": [{"title": sub.title} for sub in task.subtasks],
-                                }
-                                for task in space.tasks
-                            ],
-                        }
-                        for space in plan_data.spaces
-                    ],
-                }
-                backend_client.persist_project_plan(user_id, payload)
-                return (
-                    f"SUCCESS: Created Workspace '{plan_data.workspace.name}' with {len(plan_data.spaces)} spaces, "
-                    f"{tasks_created} tasks, and {subtasks_created} subtasks, including descriptions and due dates."
-                )
+                return json.dumps({
+                    "status": "created", "workspace": plan_data.workspace.name,
+                    "tasks_created": tasks_created, "subtasks_created": subtasks_created,
+                    "backend_result": result,
+                }, ensure_ascii=False)
             except backend_client.BackendError as e:
-                return f"FAILED to create plan: {e}"
-            except Exception as e:
-                return f"FAILED to create plan: {e}"
+                return f"FAILED: Error creating project plan: {e}"
 
         def db_create_workspace(name: str, description: str = "", color: str = "#8A2BE2") -> str:
-            """Create a single new workspace (top-level project folder). Do not use for complex projects."""
+            """Create a standalone workspace."""
             try:
-                ws = db.create_workspace(user_id=user_id, name=name, description=description, color=color)
-                return json.dumps({"status": "created", "workspace_id": ws['id'], "name": ws['name']})
-            except Exception as e: return f"FAILED: Error creating workspace: {e}"
+                ws = backend_client.create_workspace(user_id, name, description, color)
+                ws_id = backend_client._field(ws, "id")
+                return json.dumps({"status": "created", "workspace_id": ws_id, "name": name})
+            except backend_client.BackendError as e:
+                return f"FAILED: Error creating workspace: {e}"
 
-        def db_create_space(name: str, workspace_id: int, description: str = "", color: str = "#8A2BE2") -> str:
+        def db_create_space(name: str, workspace_id: int, description: str = "", icon_code: str = "") -> str:
             """Create a single space (sub-folder) inside an existing workspace."""
             try:
-                space = db.create_space(user_id=user_id, name=name, workspace_id=workspace_id, description=description, color=color)
-                return json.dumps({"status": "created", "space_id": space['id'], "name": space['name'], "workspace_id": workspace_id})
-            except Exception as e: return f"FAILED: Error creating space. Ensure workspace_id {workspace_id} is valid. Error: {e}"
-
-        def db_update_workspace_color(workspace_id: int, color: str) -> str:
-            """Change the visual color of a workspace."""
-            try:
-                ws = db.update_workspace(user_id=user_id, workspace_id=workspace_id, updates={'color': color})
-                return "Workspace color updated." if ws else f"FAILED: Workspace ID {workspace_id} not found."
-            except Exception as e: return f"FAILED: Error updating color: {e}"
+                space = backend_client.create_space(user_id, workspace_id, name, description, icon_code)
+                sp_id = backend_client._field(space, "id")
+                return json.dumps({"status": "created", "space_id": sp_id, "name": name, "workspace_id": workspace_id})
+            except backend_client.BackendError as e:
+                return f"FAILED: Error creating space. Ensure workspace_id {workspace_id} is valid. Error: {e}"
 
         def db_delete_item(item_type: str, item_id: int) -> str:
-            """Delete a task, note, workspace, or space from the database."""
+            """Delete a task, note, or workspace. (Space deletion has no confirmed endpoint yet.)"""
             try:
                 item_type = item_type.lower()
-                if item_type == 'task': success = db.delete_task(user_id=user_id, task_id=item_id)
-                elif item_type == 'note': success = db.delete_note(user_id=user_id, note_id=item_id)
-                elif item_type == 'workspace': success = db.delete_workspace(user_id=user_id, workspace_id=item_id)
-                elif item_type == 'space': success = db.delete_space(user_id=user_id, space_id=item_id)
-                else: return "FAILED: Invalid type. Must be task, note, workspace, or space."
-                return "Deleted successfully." if success else f"FAILED: ID {item_id} not found."
-            except Exception as e: return f"FAILED: Error deleting item: {e}"
+                if item_type == 'task':
+                    wid, sid = backend_client.resolve_task_location(user_id, item_id)
+                    backend_client.delete_task(user_id, wid, sid, item_id)
+                elif item_type == 'note':
+                    wid, sid = backend_client.resolve_note_location(user_id, item_id)
+                    backend_client.delete_note(user_id, wid, sid, item_id)
+                elif item_type == 'workspace':
+                    backend_client.delete_workspace(user_id, item_id)
+                else:
+                    return "FAILED: No confirmed delete endpoint for this type. Must be task, note, or workspace."
+                return "Deleted successfully."
+            except backend_client.BackendError as e:
+                return f"FAILED: Error deleting item: {e}"
 
-        def db_create_task(title: str, description: str = "", due_date: str = "",
-                           due_time: str = "", priority: str = "medium",
-                           workspace_id: int = None, space_id: int = None,
-                           recurrence: str = None, depends_on: int = None) -> str:
-            """Create a single, isolated task."""
+        def db_create_task(title: str, description: str = "", due_date: str = "", priority: str = "medium") -> str:
+            """
+            Create a single task. NOTE: the only confirmed task-creation path is the
+            quick-task endpoint — it always lands in the user's default container and
+            does not accept workspace_id/space_id/recurrence/depends_on. For tasks
+            that must live inside a specific project, use db_create_project_plan
+            instead (with a single task/space) once that structure is confirmed.
+            """
             try:
-                task = db.create_task(
-                    user_id=user_id, title=title, description=description, due_date=due_date,
-                    due_time=due_time, priority=priority, workspace_id=workspace_id,
-                    space_id=space_id, recurrence=recurrence, depends_on=depends_on
-                )
-                return json.dumps({"status": "created", "task_id": task['id'], "title": task['title']})
-            except Exception as e: return f"FAILED: Error creating task. Check if workspace_id/space_id are valid. Error: {e}"
+                task = backend_client.create_quick_task(user_id, title=title, description=description, due_date=due_date, priority=priority)
+                task_id = backend_client._field(task, "id")
+                return json.dumps({"status": "created", "task_id": task_id, "title": title})
+            except backend_client.BackendError as e:
+                return f"FAILED: Error creating task: {e}"
 
-        def db_create_subtask(title: str, parent_task_id: int, description: str = "",
-                              priority: str = "medium", due_date: str = "") -> str:
-            """Create a subtask (child step) for an existing task."""
+        def db_create_subtask(title: str, parent_task_id: int) -> str:
+            """Create a subtask (child step) for an existing task. Requires resolving the parent task's location first."""
             try:
-                parent = db.get_task_with_subtasks(user_id=user_id, task_id=parent_task_id)
-                if not parent: return f"FAILED: Parent task ID {parent_task_id} not found."
-                task = db.create_task(user_id=user_id, title=title, description=description, due_date=due_date or parent.get('due_date', ''), priority=priority, workspace_id=parent.get('workspace_id'), space_id=parent.get('space_id'), parent_id=parent_task_id)
-                return json.dumps({"status": "created", "subtask_id": task['id'], "title": task['title']})
-            except Exception as e: return f"FAILED: Error creating subtask: {e}"
+                wid, sid = backend_client.resolve_task_location(user_id, parent_task_id)
+                subtask = backend_client.create_subtask(user_id, wid, sid, parent_task_id, title)
+                st_id = backend_client._field(subtask, "id")
+                return json.dumps({"status": "created", "subtask_id": st_id, "title": title, "parent_task_id": parent_task_id})
+            except backend_client.BackendError as e:
+                return f"FAILED: Error creating subtask: {e}"
 
         def db_get_subtasks(parent_task_id: int) -> str:
             """Retrieve the list of subtasks for a given parent task."""
             try:
-                data = db.get_task_with_subtasks(user_id=user_id, task_id=parent_task_id)
-                return json.dumps(data, ensure_ascii=False) if data else f"FAILED: Task ID {parent_task_id} not found."
-            except Exception as e: return f"FAILED: Error getting subtasks: {e}"
+                wid, sid = backend_client.resolve_task_location(user_id, parent_task_id)
+                task = backend_client.get_task(user_id, wid, sid, parent_task_id)
+                return json.dumps(task, ensure_ascii=False) if task else f"FAILED: Task ID {parent_task_id} not found."
+            except backend_client.BackendError as e:
+                return f"FAILED: Error getting subtasks: {e}"
 
         def db_complete_all_subtasks(parent_task_id: int) -> str:
             """Mark all subtasks of a specific parent task as completed."""
             try:
-                subtasks = db.get_subtasks(user_id=user_id, parent_id=parent_task_id)
+                wid, sid = backend_client.resolve_task_location(user_id, parent_task_id)
+                task = backend_client.get_task(user_id, wid, sid, parent_task_id)
+                subtasks = backend_client._field(task, "subtasks", default=[]) or []
                 count = 0
-                for st in subtasks['subtasks']:
-                    if not st.get('completed'):
-                        db.complete_task(user_id=user_id, task_id=st['id'])
+                for st in subtasks:
+                    st_id = backend_client._field(st, "id")
+                    if not backend_client._field(st, "completed", "isCompleted", default=False):
+                        backend_client.set_subtask_status(user_id, wid, sid, parent_task_id, st_id, "Completed")
                         count += 1
                 return f"Marked {count} subtask(s) complete."
-            except Exception as e: return f"FAILED: Error completing subtasks: {e}"
+            except backend_client.BackendError as e:
+                return f"FAILED: Error completing subtasks: {e}"
 
         def db_complete_task(task_id: int) -> str:
             """Mark a specific task as completed."""
             try:
-                task = db.complete_task(user_id=user_id, task_id=task_id)
-                return f"Task '{task['title']}' completed!" if task else f"FAILED: Task ID {task_id} not found."
-            except Exception as e: return f"FAILED: Error completing task: {e}"
+                wid, sid = backend_client.resolve_task_location(user_id, task_id)
+                task = backend_client.set_task_status(user_id, wid, sid, task_id, "Completed")
+                title = backend_client._field(task, "title") or str(task_id)
+                return f"Task '{title}' completed!"
+            except backend_client.BackendError as e:
+                return f"FAILED: Error completing task: {e}"
 
-        def db_update_task(task_id: int, title: str = None, description: str = None,
-                           due_date: str = None, due_time: str = None, priority: str = None,
-                           recurrence: str = None, depends_on: int = None, workspace_id: int = None,
-                           space_id: int = None) -> str:
-            """Modify the details of an existing task."""
-            try:
-                updates = {k: v for k, v in [('title', title), ('description', description), ('due_date', due_date), ('due_time', due_time), ('priority', priority), ('recurrence', recurrence), ('depends_on', depends_on), ('workspace_id', workspace_id), ('space_id', space_id)] if v is not None}
-                task = db.update_task(user_id=user_id, task_id=task_id, updates=updates)
-                return f"Task updated: {task['title']}" if task else f"FAILED: Task ID {task_id} not found."
-            except Exception as e: return f"FAILED: Error updating task: {e}"
+        # REMOVED: db_update_task, db_check_task_blocked, db_create_note, db_update_note.
+        # CONFIRMED (backend spec, this pass): there is no update-task endpoint in the
+        # AI controller at all; no dependency/"blocked" model exists in the database;
+        # and notes are owned entirely by the frontend/general backend — the AI's only
+        # note-related capability is linking an EXISTING note to an EXISTING task.
 
         def db_link_note_to_task(task_id: int, note_id: int) -> str:
-            """Link an existing note to an existing task."""
+            """Link an existing note to an existing task. Cannot create or edit notes — both must already exist."""
             try:
-                task = db.update_task(user_id=user_id, task_id=task_id, updates={'linked_note_id': note_id})
-                note = db.update_note(user_id=user_id, note_id=note_id, updates={'linked_task_id': task_id})
-                return f"Linked note to task." if task and note else "FAILED: Task or Note ID not found. Could not link."
-            except Exception as e: return f"FAILED: Error linking item: {e}"
-
-        def db_check_task_blocked(task_id: int) -> str:
-            """Check if a task has dependencies preventing it from being completed."""
-            try:
-                blocked = db.is_task_blocked(user_id=user_id, task_id=task_id)
-                return f"Task {task_id} is {'BLOCKED' if blocked else 'ready to work on'}."
-            except Exception as e: return f"FAILED: Error checking dependencies: {e}"
-
-        def db_create_note(title: str, content: str, workspace_id: int = None,
-                           space_id: int = None, linked_task_id: int = None) -> str:
-            """Create a note containing research, summaries, or text blocks."""
-            try:
-                note = db.create_note(user_id=user_id, title=title, content=content, workspace_id=workspace_id, space_id=space_id, linked_task_id=linked_task_id)
-                return json.dumps({"status": "created", "note_id": note['id'], "title": note['title']})
-            except Exception as e: return f"FAILED: Error creating note: {e}"
-
-        def db_update_note(note_id: int, title: str = None, content: str = None,
-                           workspace_id: int = None, space_id: int = None, category: str = None) -> str:
-            """Update the contents or category of an existing note."""
-            try:
-                updates = {k: v for k, v in [('title', title), ('content', content), ('workspace_id', workspace_id), ('space_id', space_id), ('category', category)] if v is not None}
-                note = db.update_note(user_id=user_id, note_id=note_id, updates=updates)
-                return f"Note updated: {note['title']}" if note else f"FAILED: Note ID {note_id} not found."
-            except Exception as e: return f"FAILED: Error updating note: {e}"
+                backend_client.link_note_to_task(user_id, task_id, note_id)
+                return "Linked note to task."
+            except backend_client.BackendError as e:
+                return f"FAILED: Error linking note to task: {e}"
 
         # ── GitHub Tools ──────────────────────────────────────────
 
@@ -626,11 +637,10 @@ class AdkComplexHandler:
         return [
             # ── Original tools ────────────────────────────────────
             tool_get_context, tool_daily_briefing, tool_save_memory, tool_get_memory,
-            tool_web_search, tool_search_my_data, tool_check_schedule, tool_analyze_productivity,
-            db_create_project_plan, db_create_workspace, db_create_space, db_update_workspace_color, db_delete_item,
+            tool_web_search, tool_analyze_productivity,
+            db_create_project_plan, db_create_workspace, db_create_space, db_delete_item,
             db_create_task, db_create_subtask, db_get_subtasks, db_complete_all_subtasks,
-            db_complete_task, db_update_task, db_link_note_to_task, db_check_task_blocked,
-            db_create_note, db_update_note,
+            db_complete_task, db_link_note_to_task,
             # ── GitHub ────────────────────────────────────────────
             tool_github_get_issues, tool_github_get_prs, tool_github_create_issue,
             tool_github_close_issue, tool_github_get_repos,
@@ -645,25 +655,15 @@ class AdkComplexHandler:
         ]
 
     def _build_short_term_context(self, user_id: str) -> str:
-        try:
-            cutoff = (datetime.now() - timedelta(minutes=30)).isoformat()
-            tasks = [t for t in self.db.get_tasks(user_id=user_id, include_subtasks=True) if t.get('created_at', '') > cutoff]
-            workspaces = [w for w in self.db.get_workspaces(user_id=user_id) if w.get('created_at', '') > cutoff]
-            spaces = [s for s in self.db.get_spaces(user_id=user_id) if s.get('created_at', '') > cutoff]
-            
-            if not any([tasks, workspaces, spaces]): return ""
-                
-            lines = ["\n=== ITEMS CREATED IN THIS SESSION (last 30 min) ==="]
-            for w in workspaces: lines.append(f"- Workspace '{w['name']}' id:{w['id']}")
-            for s in spaces: lines.append(f"- Space '{s['name']}' id:{s['id']} workspace_id:{s['workspace_id']}")
-            for t in tasks:
-                kind = "Subtask" if t.get('parent_id') else "Task"
-                lines.append(f"- {kind} '{t['title']}' id:{t['id']} workspace_id:{t.get('workspace_id') or 'none'} space_id:{t.get('space_id') or 'none'}")
-            
-            lines.append("\n[CRITICAL DIRECTIVE: The IDs above are for REFERENCE. Do NOT assign new tasks to these workspaces or spaces by default. HOWEVER, if you are explicitly asked to fix a project, add to a recent project, or update a tool call that just failed, you MUST use the appropriate workspace_id and space_id from above.]")
-            return "\n".join(lines)
-        except Exception:
-            return ""
+        # REMOVED: this used to filter self.db.get_tasks/workspaces/spaces by a
+        # local `created_at` timestamp to remind the agent of IDs it just created.
+        # There's no flat listing endpoint anymore (see _aggregate_state), so doing
+        # this via backend_client would mean a full O(workspaces x spaces) walk on
+        # every single turn just to build a hint string — and `created_at` was never
+        # confirmed as a field the .NET responses actually include. Rather than ship
+        # an expensive call that may silently always return nothing, this is disabled
+        # until the backend confirms a cheap way to get "recently created" items.
+        return ""
 
     def _detect_urgency_hint(self, message: str) -> str:
         urgent_words = ['urgent', 'asap', 'emergency', 'immediately', 'right now', 'critical', 'important', 'crucial', 'today', 'now', 'عاجل', 'مهم', 'ضروري', 'فوري', 'الآن', 'اليوم']
@@ -681,11 +681,11 @@ class AdkComplexHandler:
             "You are iGenda — an elite, proactive AI productivity agent.\n\n"
             "=== YOUR CORE DIRECTIVES ===\n"
             "1. CONTEXT FIRST: For planning, scheduling, or 'what should I do' — call tool_get_context() first.\n"
-            "2. DAILY BRIEFING: When user says 'daily briefing' or 'good morning' — call tool_daily_briefing().\n"
+            "2. DAILY BRIEFING: When Yahya says 'daily briefing' or 'good morning' — call tool_daily_briefing().\n"
             "3. BULK PROJECT CREATION: For trips, study plans, or complex projects, you MUST use `db_create_project_plan`. NEVER use individual tools (`db_create_workspace`, `db_create_space`, `db_create_task`) for a new project because you cannot chain newly created IDs in parallel. The bulk tool handles everything perfectly.\n"
             "4. ISOLATION RULE: Single tasks belong to NO workspace (workspace_id=None). ONLY assign a single task to a workspace if explicitly commanded or fixing a failed tool.\n"
             "5. SELF-CORRECT: If a tool call doesn't produce expected results (returns FAILED), analyze your mistake, rewrite the parameters/JSON, and try again immediately.\n"
-            "6. LANGUAGE: ALWAYS respond in the SAME language user used. Never mix languages.\n"
+            "6. LANGUAGE: ALWAYS respond in the SAME language Yahya used. Never mix languages.\n"
         )
 
         self.agent = Agent(name="iGenda_Core_Agent", model="gemini-2.5-flash", description="Elite Planner for iGenda.", instruction=instruction, tools=selected_tools)
@@ -774,9 +774,10 @@ class AdkComplexHandler:
                     success = True
 
             self.db.save_message(user_id, 'model', final_text)
+            state = _aggregate_state(user_id)
             return {
-                "response_message": final_text, "tool_events": tool_events, "tasks": self.db.get_tasks(user_id=user_id), "notes": self.db.get_notes(user_id=user_id),
-                "workspaces": self.db.get_workspaces(user_id=user_id), "spaces": self.db.get_spaces(user_id=user_id), "processing_time": round(time.time() - start_time, 2),
+                "response_message": final_text, "tool_events": tool_events, **state,
+                "processing_time": round(time.time() - start_time, 2),
                 "ai_metadata": {"model_used": "gemini-adk-complex-structured", "retries": attempt - 1, "tools_in_context": len(relevant_tools)}
             }
         except Exception as e:
@@ -798,67 +799,70 @@ class AdkActionHandler:
 
         def db_find_task_id(search_term: str) -> str:
             """Find the parent_id to create a subtask, or need to update/complete a task."""
+            # NOTE: no flat task-listing endpoint exists, so this walks
+            # workspaces/spaces (same cost tradeoff as _aggregate_state).
             try:
-                tasks = db.get_tasks(user_id=user_id)
+                state = _aggregate_state(user_id)
                 matches = []
-                for t in tasks:
-                    if search_term.lower() in t['title'].lower() or search_term.lower() in t.get('description', '').lower():
-                        matches.append(f"ID: {t['id']} | Title: {t['title']}")
+                for t in state["tasks"]:
+                    title = backend_client._field(t, "title", default="")
+                    desc = backend_client._field(t, "description", default="")
+                    if search_term.lower() in title.lower() or search_term.lower() in (desc or "").lower():
+                        matches.append(f"ID: {backend_client._field(t, 'id')} | Title: {title}")
                 if not matches: return "FAILED: No matching tasks found. Create it as a new main task instead."
                 return "MATCHES: " + " ; ".join(matches[:3])
-            except Exception as e: return f"FAILED: Error searching for task: {e}"
+            except backend_client.BackendError as e:
+                return f"FAILED: Error searching for task: {e}"
 
-        def db_create_task(title: str, description: str = "", due_date: str = "", due_time: str = "", priority: str = "medium") -> str:
+        def db_create_task(title: str, description: str = "", due_date: str = "", priority: str = "medium") -> str:
             """Create a single, flat task with no explicit workspace/space."""
-            # CHANGE NOTE: routed through POST /api/ai/tasks/quick instead of local
-            # SQLite. This is exactly the "flat command, no project named" case that
-            # endpoint was introduced for. `description` and `due_time` are accepted
-            # here for the model's benefit but are silently NOT forwarded — the quick
-            # endpoint's schema only has title/due_date/priority.
             try:
-                data = backend_client.create_quick_task(user_id, title=title, due_date=due_date, priority=priority)
-                task_id = (data or {}).get("id") or (data or {}).get("task_id")
+                data = backend_client.create_quick_task(user_id, title=title, description=description, due_date=due_date, priority=priority)
+                task_id = backend_client._field(data, "id")
                 return json.dumps({"status": "created", "task_id": task_id, "title": title})
             except backend_client.BackendError as e:
                 return f"FAILED: Error creating task: {e}"
 
-        def db_create_subtask(title: str, parent_task_id: int, description: str = "", priority: str = "medium") -> str:
+        def db_create_subtask(title: str, parent_task_id: int) -> str:
             """Break a task into a subtask. MUST call db_find_task_id FIRST to get the parent_task_id."""
             try:
-                parent = db.get_task_with_subtasks(user_id=user_id, task_id=parent_task_id)
-                if not parent: return f"FAILED: Parent ID {parent_task_id} not found."
-                task = db.create_task(user_id=user_id, title=title, description=description, priority=priority, workspace_id=parent.get('workspace_id'), space_id=parent.get('space_id'), parent_id=parent_task_id)
-                return json.dumps({"status": "created", "subtask_id": task['id'], "title": task['title']})
-            except Exception as e: return f"FAILED: Error creating subtask: {e}"
+                wid, sid = backend_client.resolve_task_location(user_id, parent_task_id)
+                subtask = backend_client.create_subtask(user_id, wid, sid, parent_task_id, title)
+                st_id = backend_client._field(subtask, "id")
+                return json.dumps({"status": "created", "subtask_id": st_id, "title": title})
+            except backend_client.BackendError as e:
+                return f"FAILED: Error creating subtask: {e}"
 
         def db_complete_task(task_id: int) -> str:
             try:
-                task = db.complete_task(user_id=user_id, task_id=task_id)
-                return f"Task '{task['title']}' completed!" if task else f"FAILED: Task ID {task_id} not found."
-            except Exception as e: return f"FAILED: Error completing task: {e}"
+                wid, sid = backend_client.resolve_task_location(user_id, task_id)
+                task = backend_client.set_task_status(user_id, wid, sid, task_id, "Completed")
+                title = backend_client._field(task, "title") or str(task_id)
+                return f"Task '{title}' completed!"
+            except backend_client.BackendError as e:
+                return f"FAILED: Error completing task: {e}"
 
-        def db_update_task(task_id: int, title: str = None, due_date: str = None) -> str:
-            try:
-                updates = {k: v for k, v in [('title', title), ('due_date', due_date)] if v is not None}
-                task = db.update_task(user_id=user_id, task_id=task_id, updates=updates)
-                return "Task updated." if task else "FAILED: Task ID not found."
-            except Exception as e: return f"FAILED: Error updating task: {e}"
+        # REMOVED: db_update_task — no confirmed update-task endpoint exists anywhere.
 
         def db_delete_item(item_type: str, item_id: int) -> str:
             try:
-                if item_type.lower() == 'task': success = db.delete_task(user_id=user_id, task_id=item_id)
-                elif item_type.lower() == 'note': success = db.delete_note(user_id=user_id, note_id=item_id)
-                else: return "FAILED: Invalid type. Must be task or note."
-                return "Deleted." if success else "FAILED: Item ID not found."
-            except Exception as e: return f"FAILED: Error deleting item: {e}"
+                if item_type.lower() == 'task':
+                    wid, sid = backend_client.resolve_task_location(user_id, item_id)
+                    backend_client.delete_task(user_id, wid, sid, item_id)
+                elif item_type.lower() == 'note':
+                    wid, sid = backend_client.resolve_note_location(user_id, item_id)
+                    backend_client.delete_note(user_id, wid, sid, item_id)
+                else:
+                    return "FAILED: Invalid type. Must be task or note."
+                return "Deleted."
+            except backend_client.BackendError as e:
+                return f"FAILED: Error deleting item: {e}"
 
-        def db_create_note(title: str, content: str) -> str:
-            try:
-                note = db.create_note(user_id=user_id, title=title, content=content)
-                return f"Note created: {note['id']}"
-            except Exception as e: return f"FAILED: Error creating note: {e}"
+        # REMOVED: db_create_note — confirmed no note-creation endpoint exists in
+        # the AI controller. Notes are owned by the frontend/general backend; the
+        # only AI-facing note capability is linking an existing note to a task.
 
-        return [db_find_task_id, db_create_task, db_create_subtask, db_complete_task, db_update_task, db_delete_item, db_create_note]
+        return [db_find_task_id, db_create_task, db_create_subtask, db_complete_task, db_delete_item]
 
     def _build_agent(self, tools):
         instruction = (
@@ -866,7 +870,8 @@ class AdkActionHandler:
             "1. NO CHAT: Just execute the tool and confirm.\n"
             "2. SUBTASKS: If asked to add a subtask to an existing task, you MUST call `db_find_task_id(search_term)` FIRST to find the parent_task_id.\n"
             "3. EXECUTION: Once you have the parent_task_id, call `db_create_subtask`.\n"
-            "4. BILINGUAL: Reply in the same language as the user."
+            "4. NO EDITING: There is no way to update an existing task's fields or create/edit notes. If asked, say so honestly instead of attempting it.\n"
+            "5. BILINGUAL: Reply in the same language as the user."
         )
         self.agent = Agent(name="iGenda_Action_Agent", model="gemini-2.5-flash", instruction=instruction, tools=tools)
         self.runner = Runner(agent=self.agent, app_name="iGenda_App", session_service=self.session_service)
@@ -921,9 +926,10 @@ class AdkActionHandler:
             if not tool_failed:
                 success = True
 
+        state = _aggregate_state(user_id)
         return {
-            "response_message": final_text, "tool_events": tool_events, "tasks": self.db.get_tasks(user_id=user_id), "notes": self.db.get_notes(user_id=user_id),
-            "workspaces": self.db.get_workspaces(user_id=user_id), "spaces": self.db.get_spaces(user_id=user_id), "processing_time": round(time.time() - start_time, 2),
+            "response_message": final_text, "tool_events": tool_events, **state,
+            "processing_time": round(time.time() - start_time, 2),
             "ai_metadata": {"model_used": "gemini-adk-action", "retries": attempt - 1}
         }
 
