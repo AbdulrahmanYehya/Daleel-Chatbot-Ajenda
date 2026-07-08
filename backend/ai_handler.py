@@ -185,11 +185,11 @@ class AdkComplexHandler:
 
         def tool_get_context() -> str:
             """Get the user's daily schedule, overdue tasks, and upcoming tasks."""
-            return json.dumps(backend_client.get_briefing(user_id), ensure_ascii=False)
+            return json.dumps(backend_client.get_briefing(user_id, user_token), ensure_ascii=False)
 
         def tool_daily_briefing() -> str:
             """Generate a daily briefing, morning report, or daily summary."""
-            return json.dumps(backend_client.get_briefing(user_id), ensure_ascii=False)
+            return json.dumps(backend_client.get_briefing(user_id, user_token), ensure_ascii=False)
 
         def tool_save_memory(key: str, value: str) -> str:
             """Remember facts, user preferences, habits, or personal data permanently."""
@@ -338,13 +338,13 @@ class AdkComplexHandler:
             Create a note in the user's default workspace and space.
             """
             try:
-                workspaces = backend_client.get_workspaces(user_id)
+                workspaces = backend_client.get_workspaces(user_id, user_token)
                 if not workspaces:
                     return "FAILED: No workspace found."
 
                 workspace_id = backend_client._field(workspaces[0], "id")
 
-                spaces = backend_client.get_spaces(user_id, workspace_id)
+                spaces = backend_client.get_spaces(user_id, workspace_id, user_token)
                 if not spaces:
                     return "FAILED: No space found."
 
@@ -355,7 +355,7 @@ class AdkComplexHandler:
                     workspace_id=workspace_id,
                     space_id=space_id,
                     title=title,
-                    content=content,
+                    content=content, 
                 )
 
                 note_id = backend_client._field(note, "id")
