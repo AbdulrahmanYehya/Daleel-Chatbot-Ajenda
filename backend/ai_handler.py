@@ -328,6 +328,42 @@ class AdkComplexHandler:
                 return json.dumps({"status": "created", "task_id": task_id, "title": title})
             except backend_client.BackendError as e:
                 return f"FAILED: Error creating task: {e}"
+            
+        def db_create_note(title: str, content: str = "") -> str:
+            """
+            Create a note in the user's default workspace and space.
+            """
+            try:
+                workspaces = backend_client.get_workspaces(user_id)
+                if not workspaces:
+                    return "FAILED: No workspace found."
+
+                workspace_id = backend_client._field(workspaces[0], "id")
+
+                spaces = backend_client.get_spaces(user_id, workspace_id)
+                if not spaces:
+                    return "FAILED: No space found."
+
+                space_id = backend_client._field(spaces[0], "id")
+
+                note = backend_client.create_note(
+                    user_id=user_id,
+                    workspace_id=workspace_id,
+                    space_id=space_id,
+                    title=title,
+                    content=content,
+                )
+
+                note_id = backend_client._field(note, "id")
+
+                return json.dumps({
+                    "status": "created",
+                    "note_id": note_id,
+                    "title": title
+                })
+
+            except backend_client.BackendError as e:
+                return f"FAILED: Error creating note: {e}"
 
         def db_create_subtask(title: str, parent_task_id: int) -> str:
             """Create a subtask (child step) for an existing task. Requires resolving the parent task's location first."""
@@ -643,7 +679,7 @@ class AdkComplexHandler:
             tool_get_context, tool_daily_briefing, tool_save_memory, tool_get_memory,
             tool_web_search, tool_analyze_productivity,
             db_create_project_plan, db_create_workspace, db_create_space, db_delete_item,
-            db_create_task, db_create_subtask, db_get_subtasks, db_complete_all_subtasks,
+            db_create_task, db_create_note, db_create_subtask, db_get_subtasks, db_complete_all_subtasks,
             db_complete_task, db_link_note_to_task,
             # ── GitHub ────────────────────────────────────────────
             tool_github_get_issues, tool_github_get_prs, tool_github_create_issue,
@@ -842,6 +878,42 @@ class AdkActionHandler:
                 return json.dumps({"status": "created", "task_id": task_id, "title": title})
             except backend_client.BackendError as e:
                 return f"FAILED: Error creating task: {e}"
+            
+        def db_create_note(title: str, content: str = "") -> str:
+            """
+            Create a note in the user's default workspace and space.
+            """
+            try:
+                workspaces = backend_client.get_workspaces(user_id)
+                if not workspaces:
+                    return "FAILED: No workspace found."
+
+                workspace_id = backend_client._field(workspaces[0], "id")
+
+                spaces = backend_client.get_spaces(user_id, workspace_id)
+                if not spaces:
+                    return "FAILED: No space found."
+
+                space_id = backend_client._field(spaces[0], "id")
+
+                note = backend_client.create_note(
+                    user_id=user_id,
+                    workspace_id=workspace_id,
+                    space_id=space_id,
+                    title=title,
+                    content=content,
+                )
+
+                note_id = backend_client._field(note, "id")
+
+                return json.dumps({
+                    "status": "created",
+                    "note_id": note_id,
+                    "title": title
+                })
+
+            except backend_client.BackendError as e:
+                return f"FAILED: Error creating note: {e}"
 
         def db_create_subtask(title: str, parent_task_id: int) -> str:
             """Break a task into a subtask. MUST call db_find_task_id FIRST to get the parent_task_id."""
@@ -882,7 +954,7 @@ class AdkActionHandler:
         # the AI controller. Notes are owned by the frontend/general backend; the
         # only AI-facing note capability is linking an existing note to a task.
 
-        return [db_find_task_id, db_create_task, db_create_subtask, db_complete_task, db_delete_item]
+        return [db_find_task_id, db_create_task, db_create_note, db_create_subtask, db_complete_task, db_delete_item]
 
     def _build_agent(self, tools):
         instruction = (
@@ -896,7 +968,7 @@ class AdkActionHandler:
         self.agent = Agent(name="iGenda_Action_Agent", model="gemini-2.5-flash", instruction=instruction, tools=tools)
         self.runner = Runner(agent=self.agent, app_name="iGenda_App", session_service=self.session_service)
 
-    def process_message(self, user_id: str, user_message: str, language: str = 'en') -> dict:
+    def process_message(self, user_id: str, user_message: str, language: str = 'en', user_token: str = "") -> dict:
         start_time = time.time()
         tool_events = []
         session_id = f"{user_id}_action_session"
@@ -1040,7 +1112,7 @@ class EnhancedAIHandler:
 
             if intent == "ACTION":
                 if not self.light_action_agent: self.light_action_agent = AdkActionHandler(database)
-                try: return self.light_action_agent.process_message(user_id=user_id, user_message=user_message, language=language)
+                try: return self.light_action_agent.process_message(user_id=user_id, user_message=user_message, language=language, user_token=user_token)
                 except Exception as e: logging.warning(f"Action Agent failed: {e}. Falling back to Complex.")
 
             if not self.heavy_core_agent: self.heavy_core_agent = AdkComplexHandler(database)
