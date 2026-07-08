@@ -19,7 +19,7 @@ import requests
 BACKEND_URL = os.getenv("BACKEND_URL")
 
 
-def _aggregate_state(user_id: str) -> dict:
+def _aggregate_state(user_id: str, user_token: str = "") -> dict:
     """
     Reconstructs {tasks, notes, workspaces, spaces} for the frontend's
     post-turn state refresh. No flat "all tasks/notes" endpoint exists
@@ -29,16 +29,16 @@ def _aggregate_state(user_id: str) -> dict:
     listing endpoint if this becomes a bottleneck.
     """
     try:
-        workspaces = backend_client.get_workspaces(user_id)
+        workspaces = backend_client.get_workspaces(user_id, user_token)
         all_spaces, all_tasks, all_notes = [], [], []
         for ws in workspaces:
             ws_id = backend_client._field(ws, "id")
-            spaces = backend_client.get_spaces(user_id, ws_id)
+            spaces = backend_client.get_spaces(user_id, ws_id, user_token)
             all_spaces.extend(spaces)
             for sp in spaces:
                 sp_id = backend_client._field(sp, "id")
-                all_tasks.extend(backend_client.get_tasks(user_id, ws_id, sp_id))
-                all_notes.extend(backend_client.get_notes(user_id, ws_id, sp_id))
+                all_tasks.extend(backend_client.get_tasks(user_id, ws_id, sp_id, user_token))
+                all_notes.extend(backend_client.get_notes(user_id, ws_id, sp_id, user_token))
         return {"tasks": all_tasks, "notes": all_notes, "workspaces": workspaces, "spaces": all_spaces}
     except backend_client.BackendError as e:
         logging.error(f"State aggregation failed: {e}")
@@ -127,11 +127,15 @@ class AdkComplexHandler:
         logging.info("Precomputing tool embeddings for Dynamic Retrieval...")
         # Precompute using a dummy user to grab metadata (tool names and docstrings don't change per user)
         dummy_tools = self._register_tools("dummy_user")
-        self._tool_metadata = [{"name": f.__name__, "doc": f.__doc__ or ""} for f in dummy_tools]
+        self._tool_metadata = [
+            {"name": f.__name__, "doc": f.__doc__ or ""}
+            for f in dummy_tools
+        ]
         
         self.tool_docs = []
         for meta in self._tool_metadata:
             search_text = f"{meta['name'].replace('_', ' ')}: {meta['doc']}"
+            logging.info(f"TOOL EMBEDDING -> {search_text}")
             self.tool_docs.append(search_text)
             
         self.tool_vectors = self.embedder.encode(self.tool_docs)
@@ -154,7 +158,7 @@ class AdkComplexHandler:
         tools_by_name = {f.__name__: f for f in actual_tools}
         
         selected_tools = []
-        mandatory_tools = ['tool_get_context', 'db_create_project_plan'] 
+        mandatory_tools = ["tool_get_context", "db_create_task", "db_create_note", "db_update_task", "db_update_note", "db_delete_task", "db_delete_note", "db_create_project_plan"] 
         
         for idx in top_indices:
             tool_name = self._tool_metadata[idx]['name']
@@ -723,7 +727,7 @@ class AdkComplexHandler:
         try:
             session_id = self._ensure_session(user_id)
             
-            relevant_tools = self._retrieve_tools(user_id, user_message, top_k=8, user_token=user_token)
+            relevant_tools = self._retrieve_tools(user_id, user_message, top_k=12, user_token=user_token)
             self._build_agent(relevant_tools, user_id, user_message)
             logging.info(
                 f"AVAILABLE TOOLS -> {[tool.__name__ for tool in relevant_tools]}"
@@ -790,7 +794,7 @@ class AdkComplexHandler:
                     success = True
 
             self.db.save_message(user_id, 'model', final_text)
-            state = _aggregate_state(user_id)
+            state = _aggregate_state(user_id, user_token)
             return {
                 "response_message": final_text, "tool_events": tool_events, **state,
                 "processing_time": round(time.time() - start_time, 2),
@@ -942,7 +946,7 @@ class AdkActionHandler:
             if not tool_failed:
                 success = True
 
-        state = _aggregate_state(user_id)
+        state = _aggregate_state(user_id, user_token)
         return {
             "response_message": final_text, "tool_events": tool_events, **state,
             "processing_time": round(time.time() - start_time, 2),
