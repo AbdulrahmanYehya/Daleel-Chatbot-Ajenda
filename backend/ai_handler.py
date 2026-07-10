@@ -743,7 +743,7 @@ class AdkComplexHandler:
             "6. LANGUAGE: ALWAYS respond in the SAME language Yahya used. Never mix languages.\n"
         )
 
-        self.agent = Agent(name="iGenda_Core_Agent", model="gemini-2.5-flash", description="Elite Planner for iGenda.", instruction=instruction, tools=selected_tools)
+        self.agent = Agent(name="iGenda_Core_Agent", model="gemini-flash-latest", description="Elite Planner for iGenda.", instruction=instruction, tools=selected_tools)
         self.runner = Runner(agent=self.agent, app_name="iGenda_App", session_service=self.session_service)
 
     def _ensure_session(self, user_id: str):
@@ -977,7 +977,7 @@ class AdkActionHandler:
             "4. NO EDITING: There is no way to update an existing task's fields or create/edit notes. If asked, say so honestly instead of attempting it.\n"
             "5. BILINGUAL: Reply in the same language as the user."
         )
-        self.agent = Agent(name="iGenda_Action_Agent", model="gemini-2.5-flash", instruction=instruction, tools=tools)
+        self.agent = Agent(name="iGenda_Action_Agent", model="gemini-flash-latest", instruction=instruction, tools=tools)
         self.runner = Runner(agent=self.agent, app_name="iGenda_App", session_service=self.session_service)
 
     def process_message(self, user_id: str, user_message: str, language: str = 'en', user_token: str = "") -> dict:
@@ -1074,7 +1074,7 @@ class EnhancedAIHandler:
         try:
             client = genai.Client(api_key=os.environ.get("GEMINI_API_KEY"))
             response = client.models.generate_content(
-                model='gemini-2.5-flash',
+                model='gemini-flash-latest',
                 contents=user_message,
                 config=types.GenerateContentConfig(system_instruction=instruction, temperature=0.0)
             )
@@ -1111,7 +1111,7 @@ class EnhancedAIHandler:
                         "Be warm and conversational. Reply in the user's exact language."
                     )
                     response = client.models.generate_content(
-                        model='gemini-2.5-flash', contents=user_message,
+                        model='gemini-flash-latest', contents=user_message,
                         config=types.GenerateContentConfig(system_instruction=sys_inst, temperature=0.5)
                     )
                     return {
