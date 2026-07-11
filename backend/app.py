@@ -108,6 +108,14 @@ setup_logging()
 def get_current_user_id():
     return request.headers.get('X-User-Id')
 
+def get_current_user_token():
+    """Raw bearer token (no 'Bearer ' prefix) forwarded to backend_client,
+    which re-adds the prefix itself in _headers()."""
+    auth_header = request.headers.get('Authorization', '')
+    if auth_header.startswith('Bearer '):
+        return auth_header[len('Bearer '):]
+    return auth_header
+
 def require_user_id():
     """Returns (user_id, error_response). error_response is None on success."""
     user_id = get_current_user_id()
@@ -211,6 +219,7 @@ def chat_stream():
             yield sse("done", {"processing_time": 0})
         return Response(stream_with_context(_unauth_stream()), mimetype='text/event-stream')
 
+    user_token = get_current_user_token()
     data = request.json or {}
     user_message = data.get('message', '').strip()
     language = data.get('language', 'en')
@@ -235,7 +244,8 @@ def chat_stream():
                         user_id=user_id,
                         user_message=user_message,
                         message_type='text',
-                        language=language
+                        language=language,
+                        user_token=user_token
                     )
                     with events_lock:
                         result_container["result"] = result
@@ -344,7 +354,8 @@ def chat():
             user_id=user_id,
             user_message=user_message,
             message_type='text',
-            language=data.get('language', 'en')
+            language=data.get('language', 'en'),
+            user_token=get_current_user_token()
         )
         return ok(_format_agent_response(result))
     except Exception as e:
@@ -599,7 +610,8 @@ def upload_file():
             user_id=user_id,
             user_message=user_prompt,
             message_type='document_text',
-            context_data=text_content
+            context_data=text_content,
+            user_token=get_current_user_token()
         )
         return ok(_format_agent_response(result))
     except Exception as e:

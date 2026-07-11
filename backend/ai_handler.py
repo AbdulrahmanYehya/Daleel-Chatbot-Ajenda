@@ -975,7 +975,7 @@ class AdkActionHandler:
             "4. NO EDITING: There is no way to update an existing task's fields or create/edit notes. If asked, say so honestly instead of attempting it.\n"
             "5. BILINGUAL: Reply in the same language as the user."
         )
-        self.agent = Agent(name="iGenda_Action_Agent", model="gemini-2.5-flash", instruction=instruction, tools=tools)
+        self.agent = Agent(name="iGenda_Action_Agent", model="gemini-3.5-flash", instruction=instruction, tools=tools)
         self.runner = Runner(agent=self.agent, app_name="iGenda_App", session_service=self.session_service)
 
     def process_message(self, user_id: str, user_message: str, language: str = 'en', user_token: str = "") -> dict:
