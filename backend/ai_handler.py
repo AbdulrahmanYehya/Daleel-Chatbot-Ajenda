@@ -191,7 +191,7 @@ class AdkComplexHandler:
         def tool_save_memory(key: str, value: str) -> str:
             """Remember facts, user preferences, habits, or personal data permanently."""
             try:
-                backend_client.save_memory(user_id, key, value, user_token=user_token)
+                backend_client.save_memory(user_id, key, value)
                 return f"Remembered: {key} = {value}"
             except backend_client.BackendError as e:
                 return f"FAILED: Could not save memory. Error: {e}"
@@ -199,7 +199,7 @@ class AdkComplexHandler:
         def tool_get_memory(key: str) -> str:
             """Retrieve specific saved memories or preferences about the user."""
             try:
-                mem = backend_client.get_memory(user_id, user_token=user_token)
+                mem = backend_client.get_memory(user_id)
                 val = backend_client._field(mem, key) or mem.get(key)
                 return val if val else f"FAILED: No memory found for key '{key}'"
             except backend_client.BackendError as e:
@@ -226,7 +226,7 @@ class AdkComplexHandler:
             # the AI. "Smart" analytics (procrastination index, streaks, etc.) is still
             # listed as not-yet-built per doc section 7.1 — no confirmed AI-facing path.
             try:
-                data = backend_client.get_analytics(user_id, user_token=user_token)
+                data = backend_client.get_analytics(user_id)
                 return json.dumps(data, ensure_ascii=False)
             except backend_client.BackendError as e:
                 return f"FAILED: Could not analyze productivity. Error: {e}"
@@ -281,7 +281,7 @@ class AdkComplexHandler:
                         ],
                     }
                 }
-                result = backend_client.persist_tree(user_id, tree, user_token=user_token)
+                result = backend_client.persist_tree(user_id, tree)
                 tasks_created = sum(len(s.tasks) for s in plan_data.spaces)
                 subtasks_created = sum(len(t.subtasks) for s in plan_data.spaces for t in s.tasks)
                 return json.dumps({
@@ -295,7 +295,7 @@ class AdkComplexHandler:
         def db_create_workspace(name: str, description: str = "", color: str = "#8A2BE2") -> str:
             """Create a standalone workspace."""
             try:
-                ws = backend_client.create_workspace(user_id, name, description, color, user_token=user_token)
+                ws = backend_client.create_workspace(user_id, name, description, color)
                 ws_id = backend_client._field(ws, "id")
                 return json.dumps({"status": "created", "workspace_id": ws_id, "name": name})
             except backend_client.BackendError as e:
@@ -304,7 +304,7 @@ class AdkComplexHandler:
         def db_create_space(name: str, workspace_id: int, description: str = "", icon_code: str = "") -> str:
             """Create a single space (sub-folder) inside an existing workspace."""
             try:
-                space = backend_client.create_space(user_id, workspace_id, name, description, icon_code, user_token=user_token)
+                space = backend_client.create_space(user_id, workspace_id, name, description, icon_code)
                 sp_id = backend_client._field(space, "id")
                 return json.dumps({"status": "created", "space_id": sp_id, "name": name, "workspace_id": workspace_id})
             except backend_client.BackendError as e:
@@ -315,13 +315,13 @@ class AdkComplexHandler:
             try:
                 item_type = item_type.lower()
                 if item_type == 'task':
-                    wid, sid = backend_client.resolve_task_location(user_id, item_id, user_token=user_token)
-                    backend_client.delete_task(user_id, wid, sid, item_id, user_token=user_token)
+                    wid, sid = backend_client.resolve_task_location(user_id, item_id)
+                    backend_client.delete_task(user_id, wid, sid, item_id)
                 elif item_type == 'note':
-                    wid, sid = backend_client.resolve_note_location(user_id, item_id, user_token=user_token)
-                    backend_client.delete_note(user_id, wid, sid, item_id, user_token=user_token)
+                    wid, sid = backend_client.resolve_note_location(user_id, item_id)
+                    backend_client.delete_note(user_id, wid, sid, item_id)
                 elif item_type == 'workspace':
-                    backend_client.delete_workspace(user_id, item_id, user_token=user_token)
+                    backend_client.delete_workspace(user_id, item_id)
                 else:
                     return "FAILED: No confirmed delete endpoint for this type. Must be task, note, or workspace."
                 return "Deleted successfully."
@@ -337,7 +337,7 @@ class AdkComplexHandler:
             instead (with a single task/space) once that structure is confirmed.
             """
             try:
-                task = backend_client.create_quick_task(user_id, title=title, description=description, due_date=due_date, priority=priority, user_token=user_token)
+                task = backend_client.create_quick_task(user_id, title=title, description=description, due_date=due_date, priority=priority)
                 task_id = backend_client._field(task, "id")
                 return json.dumps({"status": "created", "task_id": task_id, "title": title})
             except backend_client.BackendError as e:
@@ -365,8 +365,7 @@ class AdkComplexHandler:
                     workspace_id=workspace_id,
                     space_id=space_id,
                     title=title,
-                    content=content,
-                    user_token=user_token,
+                    content=content, 
                 )
 
                 note_id = backend_client._field(note, "id")
@@ -383,8 +382,8 @@ class AdkComplexHandler:
         def db_create_subtask(title: str, parent_task_id: int) -> str:
             """Create a subtask (child step) for an existing task. Requires resolving the parent task's location first."""
             try:
-                wid, sid = backend_client.resolve_task_location(user_id, parent_task_id, user_token=user_token)
-                subtask = backend_client.create_subtask(user_id, wid, sid, parent_task_id, title, user_token=user_token)
+                wid, sid = backend_client.resolve_task_location(user_id, parent_task_id)
+                subtask = backend_client.create_subtask(user_id, wid, sid, parent_task_id, title)
                 st_id = backend_client._field(subtask, "id")
                 return json.dumps({"status": "created", "subtask_id": st_id, "title": title, "parent_task_id": parent_task_id})
             except backend_client.BackendError as e:
@@ -393,8 +392,8 @@ class AdkComplexHandler:
         def db_get_subtasks(parent_task_id: int) -> str:
             """Retrieve the list of subtasks for a given parent task."""
             try:
-                wid, sid = backend_client.resolve_task_location(user_id, parent_task_id, user_token=user_token)
-                task = backend_client.get_task(user_id, wid, sid, parent_task_id, user_token=user_token)
+                wid, sid = backend_client.resolve_task_location(user_id, parent_task_id)
+                task = backend_client.get_task(user_id, wid, sid, parent_task_id)
                 return json.dumps(task, ensure_ascii=False) if task else f"FAILED: Task ID {parent_task_id} not found."
             except backend_client.BackendError as e:
                 return f"FAILED: Error getting subtasks: {e}"
@@ -402,14 +401,14 @@ class AdkComplexHandler:
         def db_complete_all_subtasks(parent_task_id: int) -> str:
             """Mark all subtasks of a specific parent task as completed."""
             try:
-                wid, sid = backend_client.resolve_task_location(user_id, parent_task_id, user_token=user_token)
-                task = backend_client.get_task(user_id, wid, sid, parent_task_id, user_token=user_token)
+                wid, sid = backend_client.resolve_task_location(user_id, parent_task_id)
+                task = backend_client.get_task(user_id, wid, sid, parent_task_id)
                 subtasks = backend_client._field(task, "subtasks", default=[]) or []
                 count = 0
                 for st in subtasks:
                     st_id = backend_client._field(st, "id")
                     if not backend_client._field(st, "completed", "isCompleted", default=False):
-                        backend_client.set_subtask_status(user_id, wid, sid, parent_task_id, st_id, "Completed", user_token=user_token)
+                        backend_client.set_subtask_status(user_id, wid, sid, parent_task_id, st_id, "Completed")
                         count += 1
                 return f"Marked {count} subtask(s) complete."
             except backend_client.BackendError as e:
@@ -418,8 +417,8 @@ class AdkComplexHandler:
         def db_complete_task(task_id: int) -> str:
             """Mark a specific task as completed."""
             try:
-                wid, sid = backend_client.resolve_task_location(user_id, task_id, user_token=user_token)
-                task = backend_client.set_task_status(user_id, wid, sid, task_id, "Completed", user_token=user_token)
+                wid, sid = backend_client.resolve_task_location(user_id, task_id)
+                task = backend_client.set_task_status(user_id, wid, sid, task_id, "Completed")
                 title = backend_client._field(task, "title") or str(task_id)
                 return f"Task '{title}' completed!"
             except backend_client.BackendError as e:
@@ -434,7 +433,7 @@ class AdkComplexHandler:
         def db_link_note_to_task(task_id: int, note_id: int) -> str:
             """Link an existing note to an existing task. Cannot create or edit notes — both must already exist."""
             try:
-                backend_client.link_note_to_task(user_id, task_id, note_id, user_token=user_token)
+                backend_client.link_note_to_task(user_id, task_id, note_id)
                 return "Linked note to task."
             except backend_client.BackendError as e:
                 return f"FAILED: Error linking note to task: {e}"
@@ -743,7 +742,7 @@ class AdkComplexHandler:
             "6. LANGUAGE: ALWAYS respond in the SAME language Yahya used. Never mix languages.\n"
         )
 
-        self.agent = Agent(name="iGenda_Core_Agent", model="gemini-flash-latest", description="Elite Planner for iGenda.", instruction=instruction, tools=selected_tools)
+        self.agent = Agent(name="iGenda_Core_Agent", model="gemini-2.5-flash", description="Elite Planner for iGenda.", instruction=instruction, tools=selected_tools)
         self.runner = Runner(agent=self.agent, app_name="iGenda_App", session_service=self.session_service)
 
     def _ensure_session(self, user_id: str):
@@ -863,13 +862,13 @@ class AdkActionHandler:
         print("ComplexHandler", id(self))
         print("SessionService", id(self.session_service))
 
-    def _register_tools(self, user_id: str, user_token: str = ""):
+    def _register_tools(self, user_id: str):
         def db_find_task_id(search_term: str) -> str:
             """Find the parent_id to create a subtask, or need to update/complete a task."""
             # NOTE: no flat task-listing endpoint exists, so this walks
             # workspaces/spaces (same cost tradeoff as _aggregate_state).
             try:
-                state = _aggregate_state(user_id, user_token)
+                state = _aggregate_state(user_id)
                 matches = []
                 for t in state["tasks"]:
                     title = backend_client._field(t, "title", default="")
@@ -884,7 +883,7 @@ class AdkActionHandler:
         def db_create_task(title: str, description: str = "", due_date: str = "", priority: str = "medium") -> str:
             """Create a single, flat task with no explicit workspace/space."""
             try:
-                data = backend_client.create_quick_task(user_id, title=title, description=description, due_date=due_date, priority=priority, user_token=user_token)
+                data = backend_client.create_quick_task(user_id, title=title, description=description, due_date=due_date, priority=priority)
                 task_id = backend_client._field(data, "id")
                 return json.dumps({"status": "created", "task_id": task_id, "title": title})
             except backend_client.BackendError as e:
@@ -895,13 +894,13 @@ class AdkActionHandler:
             Create a note in the user's default workspace and space.
             """
             try:
-                workspaces = backend_client.get_workspaces(user_id, user_token)
+                workspaces = backend_client.get_workspaces(user_id)
                 if not workspaces:
                     return "FAILED: No workspace found."
 
                 workspace_id = backend_client._field(workspaces[0], "id")
 
-                spaces = backend_client.get_spaces(user_id, workspace_id, user_token)
+                spaces = backend_client.get_spaces(user_id, workspace_id)
                 if not spaces:
                     return "FAILED: No space found."
 
@@ -913,7 +912,6 @@ class AdkActionHandler:
                     space_id=space_id,
                     title=title,
                     content=content,
-                    user_token=user_token,
                 )
 
                 note_id = backend_client._field(note, "id")
@@ -930,8 +928,8 @@ class AdkActionHandler:
         def db_create_subtask(title: str, parent_task_id: int) -> str:
             """Break a task into a subtask. MUST call db_find_task_id FIRST to get the parent_task_id."""
             try:
-                wid, sid = backend_client.resolve_task_location(user_id, parent_task_id, user_token=user_token)
-                subtask = backend_client.create_subtask(user_id, wid, sid, parent_task_id, title, user_token=user_token)
+                wid, sid = backend_client.resolve_task_location(user_id, parent_task_id)
+                subtask = backend_client.create_subtask(user_id, wid, sid, parent_task_id, title)
                 st_id = backend_client._field(subtask, "id")
                 return json.dumps({"status": "created", "subtask_id": st_id, "title": title})
             except backend_client.BackendError as e:
@@ -939,8 +937,8 @@ class AdkActionHandler:
 
         def db_complete_task(task_id: int) -> str:
             try:
-                wid, sid = backend_client.resolve_task_location(user_id, task_id, user_token=user_token)
-                task = backend_client.set_task_status(user_id, wid, sid, task_id, "Completed", user_token=user_token)
+                wid, sid = backend_client.resolve_task_location(user_id, task_id)
+                task = backend_client.set_task_status(user_id, wid, sid, task_id, "Completed")
                 title = backend_client._field(task, "title") or str(task_id)
                 return f"Task '{title}' completed!"
             except backend_client.BackendError as e:
@@ -951,11 +949,11 @@ class AdkActionHandler:
         def db_delete_item(item_type: str, item_id: int) -> str:
             try:
                 if item_type.lower() == 'task':
-                    wid, sid = backend_client.resolve_task_location(user_id, item_id, user_token=user_token)
-                    backend_client.delete_task(user_id, wid, sid, item_id, user_token=user_token)
+                    wid, sid = backend_client.resolve_task_location(user_id, item_id)
+                    backend_client.delete_task(user_id, wid, sid, item_id)
                 elif item_type.lower() == 'note':
-                    wid, sid = backend_client.resolve_note_location(user_id, item_id, user_token=user_token)
-                    backend_client.delete_note(user_id, wid, sid, item_id, user_token=user_token)
+                    wid, sid = backend_client.resolve_note_location(user_id, item_id)
+                    backend_client.delete_note(user_id, wid, sid, item_id)
                 else:
                     return "FAILED: Invalid type. Must be task or note."
                 return "Deleted."
@@ -977,7 +975,7 @@ class AdkActionHandler:
             "4. NO EDITING: There is no way to update an existing task's fields or create/edit notes. If asked, say so honestly instead of attempting it.\n"
             "5. BILINGUAL: Reply in the same language as the user."
         )
-        self.agent = Agent(name="iGenda_Action_Agent", model="gemini-flash-latest", instruction=instruction, tools=tools)
+        self.agent = Agent(name="iGenda_Action_Agent", model="gemini-2.5-flash", instruction=instruction, tools=tools)
         self.runner = Runner(agent=self.agent, app_name="iGenda_App", session_service=self.session_service)
 
     def process_message(self, user_id: str, user_message: str, language: str = 'en', user_token: str = "") -> dict:
@@ -990,7 +988,7 @@ class AdkActionHandler:
         if session is None:
             _run_async(self.session_service.create_session(app_name="iGenda_App", user_id=user_id, session_id=session_id))
         
-        tools = self._register_tools(user_id, user_token)
+        tools = self._register_tools(user_id)
         self._build_agent(tools)
         
         lang_hint = "\n[LANGUAGE DIRECTIVE: Respond in Arabic.]" if bool(re.search(r'[\u0600-\u06FF]', user_message)) else "\n[LANGUAGE DIRECTIVE: Respond in English.]"
@@ -1074,7 +1072,7 @@ class EnhancedAIHandler:
         try:
             client = genai.Client(api_key=os.environ.get("GEMINI_API_KEY"))
             response = client.models.generate_content(
-                model='gemini-flash-latest',
+                model='gemini-2.5-flash',
                 contents=user_message,
                 config=types.GenerateContentConfig(system_instruction=instruction, temperature=0.0)
             )
@@ -1111,7 +1109,7 @@ class EnhancedAIHandler:
                         "Be warm and conversational. Reply in the user's exact language."
                     )
                     response = client.models.generate_content(
-                        model='gemini-flash-latest', contents=user_message,
+                        model='gemini-2.5-flash', contents=user_message,
                         config=types.GenerateContentConfig(system_instruction=sys_inst, temperature=0.5)
                     )
                     return {
