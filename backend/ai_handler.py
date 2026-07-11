@@ -742,7 +742,7 @@ class AdkComplexHandler:
             "6. LANGUAGE: ALWAYS respond in the SAME language Yahya used. Never mix languages.\n"
         )
 
-        self.agent = Agent(name="iGenda_Core_Agent", model="gemini-2.5-flash", description="Elite Planner for iGenda.", instruction=instruction, tools=selected_tools)
+        self.agent = Agent(name="iGenda_Core_Agent", model="gemini-3.5-flash", description="Elite Planner for iGenda.", instruction=instruction, tools=selected_tools)
         self.runner = Runner(agent=self.agent, app_name="iGenda_App", session_service=self.session_service)
 
     def _ensure_session(self, user_id: str):
@@ -849,9 +849,9 @@ class AdkComplexHandler:
                 "processing_time": round(time.time() - start_time, 2),
                 "ai_metadata": {"model_used": "gemini-adk-complex-structured", "retries": attempt - 1, "tools_in_context": len(relevant_tools)}
             }
-        except Exception as e:
-            logging.error(f"Complex Agent Error: {e}")
-            raise e
+        except Exception:
+            logging.exception("Complex Agent Error")
+            raise
 
 # ======================================================================================
 # LIGHTWEIGHT AGENT: The Fast Lane for simple CRUD & Subtasks
@@ -1072,7 +1072,7 @@ class EnhancedAIHandler:
         try:
             client = genai.Client(api_key=os.environ.get("GEMINI_API_KEY"))
             response = client.models.generate_content(
-                model='gemini-2.5-flash',
+                model='gemini-3.5-flash',
                 contents=user_message,
                 config=types.GenerateContentConfig(system_instruction=instruction, temperature=0.0)
             )
@@ -1109,7 +1109,7 @@ class EnhancedAIHandler:
                         "Be warm and conversational. Reply in the user's exact language."
                     )
                     response = client.models.generate_content(
-                        model='gemini-2.5-flash', contents=user_message,
+                        model='gemini-3.5-flash', contents=user_message,
                         config=types.GenerateContentConfig(system_instruction=sys_inst, temperature=0.5)
                     )
                     return {
@@ -1131,8 +1131,8 @@ class EnhancedAIHandler:
                     user_id=user_id, user_message=user_message, language=language,
                     message_type=message_type, context_data=context_data, user_token=user_token
                 )
-            except Exception as e:
-                logging.warning(f"ADK Complex failed, falling back to offline. Error: {e}")
+            except Exception:
+                logging.exception("ADK Complex failed, falling back to offline.")
 
         if message_type == 'document_text':
             text_to_process = context_data if context_data else user_message

@@ -659,7 +659,7 @@ def parse_pdf():
             "(Action Items) واضحة ومطلوبة بناءً على محتوى الملف."
         )
         response = client.models.generate_content(
-            model='gemini-2.5-flash',
+            model='gemini-3.5-flash',
             contents=[
                 types.Part.from_bytes(data=pdf_bytes, mime_type="application/pdf"),
                 prompt,
