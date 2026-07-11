@@ -1009,9 +1009,15 @@ class AdkActionHandler:
                 if hasattr(event, 'content') and event.content:
                     for part in getattr(event.content, 'parts', []):
                         if hasattr(part, 'function_call') and part.function_call:
+                            logging.info(
+                                f"TOOL CALL -> {part.function_call.name} | args={dict(part.function_call.args)}"
+                            )
                             tool_events.append({"type": "tool_call", "name": part.function_call.name, "args": dict(part.function_call.args)})
                         elif hasattr(part, 'function_response') and part.function_response:
                             result_str = str(part.function_response.response)
+                            logging.info(
+                                f"TOOL RESULT -> {part.function_response.name} | {result_str}"
+                            )
                             tool_events.append({"type": "tool_result", "name": part.function_response.name, "result": result_str[:300]})
                             
                             result_lower = result_str.lower()
@@ -1023,6 +1029,7 @@ class AdkActionHandler:
                                 break
                                 
                         elif hasattr(part, 'text') and part.text:
+                            logging.info(f"MODEL SAID -> {part.text}")
                             final_text = part.text
                 
                 if tool_failed:
