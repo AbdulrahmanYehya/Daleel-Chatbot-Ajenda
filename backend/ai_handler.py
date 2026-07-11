@@ -574,21 +574,38 @@ class AdkComplexHandler:
 
         # ── Gmail Tools ───────────────────────────────────────────
 
-        def tool_gmail_send(to: str, subject: str, body: str, cc: str = "") -> str:
+        def tool_gmail_send(to: str, subject: str, body: str) -> str:
             """Send an email via the user's connected Gmail account."""
             try:
                 response = requests.post(
                     f"{BACKEND_URL}/integrations/v1/gmail/send",
-                    json={"to": to, "subject": subject, "body": body, "cc": cc, "user_id": user_id},
-                    headers={"Authorization": f"Bearer {user_token}"},
+                    json={
+                        "to": to,
+                        "subject": subject,
+                        "bodyText": body
+                    },
+                    headers={
+                        "Authorization": f"Bearer {user_token}"
+                    },
                     timeout=10
                 )
-                print(response.status_code)
-                print(response.text)
-                data = response.json()
-                if data.get("status") == "error":
-                    return f"FAILED: {data.get('message')}"
+
+                print("STATUS:", response.status_code)
+                print("BODY:", response.text)
+
+                if not response.ok:
+                    return f"FAILED ({response.status_code}): {response.text}"
+
+                # Some endpoints return no JSON on success (204 No Content)
+                if response.text.strip():
+                    try:
+                        data = response.json()
+                        print("JSON:", data)
+                    except Exception:
+                        print("Response was not JSON.")
+
                 return "SUCCESS: Email sent."
+
             except Exception as e:
                 return f"FAILED: Gmail send error: {e}"
 
