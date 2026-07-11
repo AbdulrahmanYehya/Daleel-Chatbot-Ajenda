@@ -159,20 +159,32 @@ def status():
 def welcome():
     user_id, error = require_user_id()
     if error: return error
-    try:
-        user_token = get_current_user_token()
-        memory = backend_client.get_memory(user_id, user_token=user_token)
-        briefing_data = backend_client.get_briefing(user_id, user_token=user_token)
-    except backend_client.BackendError as e:
-        logging.error(f"Welcome: backend call failed: {e}")
-        memory, briefing_data = {}, {}
+
+    user_token = get_current_user_token()
+    authenticated = bool(user_token)
+
+    memory, briefing_data = {}, {}
+    if authenticated:
+        try:
+            memory = backend_client.get_memory(user_id, user_token=user_token)
+            briefing_data = backend_client.get_briefing(user_id, user_token=user_token)
+        except backend_client.BackendError as e:
+            logging.error(f"Welcome: backend call failed: {e}")
+    else:
+        logging.warning(f"Welcome: no Authorization token present for user {user_id}; skipping personalized data.")
+
     todays = briefing_data.get("todaysTasks") or briefing_data.get("todays_tasks") or []
     overdue = briefing_data.get("overdueTasks") or briefing_data.get("overdue_tasks") or []
     hour = datetime.now().hour
     greeting = "Good morning" if hour < 12 else ("Good afternoon" if hour < 17 else "Good evening")
-    
+
     parts = [f"{greeting}, {user_id.capitalize()}! 👋"]
-    if todays:
+    if not authenticated:
+        # Distinct from "schedule is clear" — this is "we couldn't check",
+        # not "there's nothing to check". Don't claim a clear schedule when
+        # we never actually looked.
+        parts.append("Sign in to see today's tasks and reminders.")
+    elif todays:
         parts.append(f"You have **{len(todays)} task(s)** scheduled for today.")
     else:
         parts.append("Your schedule is clear today — want me to plan something?")
@@ -181,7 +193,7 @@ def welcome():
     goal = memory.get('goal') or memory.get('goal_2026')
     if goal:
         parts.append(f"Keep pushing toward: *{goal}* 💪")
-    return ok({"message": "\n".join(parts)})
+    return ok({"message": "\n".join(parts), "authenticated": authenticated})
 
 @app.route('/api/ai/briefing')
 def briefing():
