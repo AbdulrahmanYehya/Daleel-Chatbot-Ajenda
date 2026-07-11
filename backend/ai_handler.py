@@ -19,6 +19,56 @@ import requests
 BACKEND_URL = os.getenv("BACKEND_URL")
 
 
+def _build_fallback_confirmation(tool_events: list) -> str:
+    """
+    Used when Gemini returns a transient error (e.g. 503 UNAVAILABLE) on the
+    follow-up call AFTER a tool has already executed successfully — the
+    backend mutation went through, but the model never got to narrate it.
+    Rather than surface a raw error for a request that actually succeeded,
+    summarize the last successful tool result directly.
+    """
+    import ast
+    for event in reversed(tool_events):
+        if event.get("type") != "tool_result":
+            continue
+        result_str = event.get("result", "")
+        if any(kw in result_str.lower() for kw in ("failed", "error")):
+            continue
+
+        data = None
+        try:
+            # Stored result looks like "{'result': '{\"status\": ...}'}" —
+            # a (possibly truncated, since it's capped at 300 chars) repr of
+            # the ADK function_response dict, not raw JSON.
+            outer = ast.literal_eval(result_str)
+            inner = outer.get("result") if isinstance(outer, dict) else result_str
+            data = json.loads(inner)
+        except Exception:
+            data = None
+
+        if isinstance(data, dict):
+            bits = []
+            if data.get("workspace"):
+                bits.append(f"workspace \"{data['workspace']}\"")
+            if data.get("title"):
+                bits.append(f"\"{data['title']}\"")
+            if data.get("tasks_created"):
+                bits.append(f"{data['tasks_created']} task(s)")
+            if data.get("subtasks_created"):
+                bits.append(f"{data['subtasks_created']} subtask(s)")
+            summary = ", ".join(bits) if bits else event.get("name", "your request")
+            return (
+                f"Done — {summary} created successfully. "
+                "(The AI service was briefly overloaded generating this summary, "
+                "so this is an automatic confirmation rather than the model's own reply.)"
+            )
+        return (
+            f"Your request was completed successfully ({event.get('name', 'tool')} ran without error), "
+            "but I couldn't generate the usual explanation because the AI service is temporarily busy."
+        )
+    return ""
+
+
 def _aggregate_state(user_id: str, user_token: str = "") -> dict:
     """
     Reconstructs {tasks, notes, workspaces, spaces} for the frontend's
@@ -63,6 +113,7 @@ try:
     from google.adk.runners import Runner
     from google.adk.sessions import InMemorySessionService
     from google.genai import types
+    from google.genai import errors as genai_errors
     from google import genai 
     from pydantic import BaseModel, Field, ValidationError
     from typing import List, Optional
@@ -803,44 +854,59 @@ class AdkComplexHandler:
             while attempt < max_retries and not success:
                 attempt += 1
                 tool_failed = False
-                
-                for event in self.runner.run(user_id=user_id, session_id=session_id, new_message=content):
-                    if hasattr(event, 'content') and event.content:
-                        for part in getattr(event.content, 'parts', []):
-                            if hasattr(part, 'function_call') and part.function_call:
 
-                                logging.info(
-                                    f"TOOL CALL -> {part.function_call.name} | args={dict(part.function_call.args)}"
-                                )
+                try:
+                    for event in self.runner.run(user_id=user_id, session_id=session_id, new_message=content):
+                        if hasattr(event, 'content') and event.content:
+                            for part in getattr(event.content, 'parts', []):
+                                if hasattr(part, 'function_call') and part.function_call:
 
-                                tool_events.append({
-                                    "type": "tool_call",
-                                    "name": part.function_call.name,
-                                    "args": dict(part.function_call.args)
-                                })
-                            
-                            elif hasattr(part, 'function_response') and part.function_response:
-                                result_str = str(part.function_response.response)
-                                logging.info(
-                                    f"TOOL RESULT -> {part.function_response.name} | {result_str}"
-                                )
-                                tool_events.append({"type": "tool_result", "name": part.function_response.name, "result": result_str[:300]})
-                                
-                                result_lower = result_str.lower()
-                                if "failed" in result_lower or "error" in result_lower or "not found" in result_lower:
-                                    tool_failed = True
-                                    logging.warning(f"Complex Agent tool failed on attempt {attempt}: {result_str}")
-                                    correction_prompt = f"[SYSTEM: Your last tool call failed with error: {result_str}. Analyze your JSON/parameters, FIX the mistake, and execute again immediately.]"
-                                    content = types.Content(role='user', parts=[types.Part.from_text(text=correction_prompt)])
-                                    break 
-                                    
-                            elif hasattr(part, 'text') and part.text:
-                                logging.info(f"MODEL SAID -> {part.text}")
-                                final_text = part.text
-                    
-                    if tool_failed:
-                        break 
-                
+                                    logging.info(
+                                        f"TOOL CALL -> {part.function_call.name} | args={dict(part.function_call.args)}"
+                                    )
+
+                                    tool_events.append({
+                                        "type": "tool_call",
+                                        "name": part.function_call.name,
+                                        "args": dict(part.function_call.args)
+                                    })
+
+                                elif hasattr(part, 'function_response') and part.function_response:
+                                    result_str = str(part.function_response.response)
+                                    logging.info(
+                                        f"TOOL RESULT -> {part.function_response.name} | {result_str}"
+                                    )
+                                    tool_events.append({"type": "tool_result", "name": part.function_response.name, "result": result_str[:300]})
+
+                                    result_lower = result_str.lower()
+                                    if "failed" in result_lower or "error" in result_lower or "not found" in result_lower:
+                                        tool_failed = True
+                                        logging.warning(f"Complex Agent tool failed on attempt {attempt}: {result_str}")
+                                        correction_prompt = f"[SYSTEM: Your last tool call failed with error: {result_str}. Analyze your JSON/parameters, FIX the mistake, and execute again immediately.]"
+                                        content = types.Content(role='user', parts=[types.Part.from_text(text=correction_prompt)])
+                                        break
+
+                                elif hasattr(part, 'text') and part.text:
+                                    logging.info(f"MODEL SAID -> {part.text}")
+                                    final_text = part.text
+
+                        if tool_failed:
+                            break
+                except genai_errors.ServerError as e:
+                    # Gemini itself is transiently unavailable (e.g. 503 high demand).
+                    # This can happen on the FOLLOW-UP call after a tool already ran
+                    # successfully — the backend mutation already happened, so don't
+                    # retry (that could duplicate it) and don't surface a raw error
+                    # for a request that actually succeeded. Confirm from tool_events
+                    # instead.
+                    logging.warning(f"Gemini transient error on attempt {attempt}: {e}")
+                    fallback = _build_fallback_confirmation(tool_events)
+                    if fallback:
+                        final_text = fallback
+                        success = True
+                        break
+                    raise
+
                 if not tool_failed:
                     success = True
 
@@ -1005,35 +1071,48 @@ class AdkActionHandler:
             attempt += 1
             tool_failed = False
 
-            for event in self.runner.run(user_id=user_id, session_id=session_id, new_message=content):
-                if hasattr(event, 'content') and event.content:
-                    for part in getattr(event.content, 'parts', []):
-                        if hasattr(part, 'function_call') and part.function_call:
-                            logging.info(
-                                f"TOOL CALL -> {part.function_call.name} | args={dict(part.function_call.args)}"
-                            )
-                            tool_events.append({"type": "tool_call", "name": part.function_call.name, "args": dict(part.function_call.args)})
-                        elif hasattr(part, 'function_response') and part.function_response:
-                            result_str = str(part.function_response.response)
-                            logging.info(
-                                f"TOOL RESULT -> {part.function_response.name} | {result_str}"
-                            )
-                            tool_events.append({"type": "tool_result", "name": part.function_response.name, "result": result_str[:300]})
-                            
-                            result_lower = result_str.lower()
-                            if "not found" in result_lower or "error" in result_lower or "failed" in result_lower:
-                                tool_failed = True
-                                logging.warning(f"Action Agent tool failed on attempt {attempt}: {result_str}")
-                                correction_prompt = f"[SYSTEM: Tool failed: {result_str}. Try a different ID or fix the parameters and execute again.]"
-                                content = types.Content(role='user', parts=[types.Part.from_text(text=correction_prompt)])
-                                break
-                                
-                        elif hasattr(part, 'text') and part.text:
-                            logging.info(f"MODEL SAID -> {part.text}")
-                            final_text = part.text
-                
-                if tool_failed:
+            try:
+                for event in self.runner.run(user_id=user_id, session_id=session_id, new_message=content):
+                    if hasattr(event, 'content') and event.content:
+                        for part in getattr(event.content, 'parts', []):
+                            if hasattr(part, 'function_call') and part.function_call:
+                                logging.info(
+                                    f"TOOL CALL -> {part.function_call.name} | args={dict(part.function_call.args)}"
+                                )
+                                tool_events.append({"type": "tool_call", "name": part.function_call.name, "args": dict(part.function_call.args)})
+                            elif hasattr(part, 'function_response') and part.function_response:
+                                result_str = str(part.function_response.response)
+                                logging.info(
+                                    f"TOOL RESULT -> {part.function_response.name} | {result_str}"
+                                )
+                                tool_events.append({"type": "tool_result", "name": part.function_response.name, "result": result_str[:300]})
+
+                                result_lower = result_str.lower()
+                                if "not found" in result_lower or "error" in result_lower or "failed" in result_lower:
+                                    tool_failed = True
+                                    logging.warning(f"Action Agent tool failed on attempt {attempt}: {result_str}")
+                                    correction_prompt = f"[SYSTEM: Tool failed: {result_str}. Try a different ID or fix the parameters and execute again.]"
+                                    content = types.Content(role='user', parts=[types.Part.from_text(text=correction_prompt)])
+                                    break
+
+                            elif hasattr(part, 'text') and part.text:
+                                logging.info(f"MODEL SAID -> {part.text}")
+                                final_text = part.text
+
+                    if tool_failed:
+                        break
+            except genai_errors.ServerError as e:
+                # Same transient-Gemini-error case as the Complex handler: the
+                # backend mutation may have already succeeded via a tool call
+                # before this error hit, so confirm from tool_events instead of
+                # retrying (which could duplicate the mutation) or crashing.
+                logging.warning(f"Gemini transient error on attempt {attempt}: {e}")
+                fallback = _build_fallback_confirmation(tool_events)
+                if fallback:
+                    final_text = fallback
+                    success = True
                     break
+                raise
             
             if not tool_failed:
                 success = True
@@ -1126,8 +1205,8 @@ class EnhancedAIHandler:
                         **_aggregate_state(user_id, user_token),
                         "ai_metadata": {"model_used": "gemini-chat-only"}
                     }
-                except Exception:
-                    pass
+                except Exception as e:
+                    logging.warning(f"CHAT-only Gemini call failed: {e}. Falling back to Complex handler.")
 
             if intent == "ACTION":
                 if not self.light_action_agent: self.light_action_agent = AdkActionHandler()
