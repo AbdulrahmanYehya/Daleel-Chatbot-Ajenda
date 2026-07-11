@@ -736,11 +736,11 @@ class AdkComplexHandler:
             "You are iGenda — an elite, proactive AI productivity agent.\n\n"
             "=== YOUR CORE DIRECTIVES ===\n"
             "1. CONTEXT FIRST: For planning, scheduling, or 'what should I do' — call tool_get_context() first.\n"
-            "2. DAILY BRIEFING: When Yahya says 'daily briefing' or 'good morning' — call tool_daily_briefing().\n"
+            "2. DAILY BRIEFING: When the user says 'daily briefing' or 'good morning' — call tool_daily_briefing().\n"
             "3. BULK PROJECT CREATION: For trips, study plans, or complex projects, you MUST use `db_create_project_plan`. NEVER use individual tools (`db_create_workspace`, `db_create_space`, `db_create_task`) for a new project because you cannot chain newly created IDs in parallel. The bulk tool handles everything perfectly.\n"
             "4. ISOLATION RULE: Single tasks belong to NO workspace (workspace_id=None). ONLY assign a single task to a workspace if explicitly commanded or fixing a failed tool.\n"
             "5. SELF-CORRECT: If a tool call doesn't produce expected results (returns FAILED), analyze your mistake, rewrite the parameters/JSON, and try again immediately.\n"
-            "6. LANGUAGE: ALWAYS respond in the SAME language Yahya used. Never mix languages.\n"
+            "6. LANGUAGE: ALWAYS respond in the SAME language the user used. Never mix languages.\n"
         )
 
         self.agent = Agent(name="iGenda_Core_Agent", model="gemini-3.5-flash", description="Elite Planner for iGenda.", instruction=instruction, tools=selected_tools)

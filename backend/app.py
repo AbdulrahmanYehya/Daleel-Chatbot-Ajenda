@@ -160,8 +160,9 @@ def welcome():
     user_id, error = require_user_id()
     if error: return error
     try:
-        memory = backend_client.get_memory(user_id)
-        briefing_data = backend_client.get_briefing(user_id)
+        user_token = get_current_user_token()
+        memory = backend_client.get_memory(user_id, user_token=user_token)
+        briefing_data = backend_client.get_briefing(user_id, user_token=user_token)
     except backend_client.BackendError as e:
         logging.error(f"Welcome: backend call failed: {e}")
         memory, briefing_data = {}, {}
@@ -187,7 +188,7 @@ def briefing():
     user_id, error = require_user_id()
     if error: return error
     try:
-        return ok(backend_client.get_briefing(user_id))
+        return ok(backend_client.get_briefing(user_id, user_token=get_current_user_token()))
     except backend_client.BackendError as e:
         return err("BACKEND_ERROR", str(e), 502)
 
@@ -303,7 +304,7 @@ def chat_stream():
                 "workspaces": result.get("workspaces", [])
             })
 
-            briefing = backend_client.get_briefing(user_id)
+            briefing = backend_client.get_briefing(user_id, user_token=user_token)
             overdue = briefing.get("overdueTasks", [])
             todays = briefing.get("todaysTasks", [])
             if overdue:
@@ -391,7 +392,7 @@ def get_workspaces():
     user_id, error = require_user_id()
     if error: return error
     try:
-        return ok(backend_client.get_workspaces(user_id))
+        return ok(backend_client.get_workspaces(user_id, get_current_user_token()))
     except backend_client.BackendError as e:
         return err("BACKEND_ERROR", str(e), 502)
 
@@ -401,7 +402,7 @@ def update_workspace(workspace_id):
     if error: return error
     data = request.json or {}
     try:
-        ws = backend_client.update_workspace(user_id, workspace_id, data)
+        ws = backend_client.update_workspace(user_id, workspace_id, data, user_token=get_current_user_token())
     except backend_client.BackendError as e:
         return err("BACKEND_ERROR", str(e), 502)
     if not ws: return err("NOT_FOUND", f"Workspace {workspace_id} not found", 404)
@@ -412,7 +413,7 @@ def delete_workspace(workspace_id):
     user_id, error = require_user_id()
     if error: return error
     try:
-        backend_client.delete_workspace(user_id, workspace_id)
+        backend_client.delete_workspace(user_id, workspace_id, user_token=get_current_user_token())
     except backend_client.BackendError as e:
         return err("BACKEND_ERROR", str(e), 502)
     return ok({"deleted": True, "id": workspace_id})
@@ -429,7 +430,7 @@ def get_spaces():
     if not workspace_id:
         return err("VALIDATION_ERROR", "workspace_id query param is required (no flat cross-workspace spaces endpoint exists).", 400)
     try:
-        return ok(backend_client.get_spaces(user_id, int(workspace_id)))
+        return ok(backend_client.get_spaces(user_id, int(workspace_id), user_token=get_current_user_token()))
     except backend_client.BackendError as e:
         return err("BACKEND_ERROR", str(e), 502)
 
@@ -438,8 +439,9 @@ def get_task_subtasks(task_id):
     user_id, error = require_user_id()
     if error: return error
     try:
-        workspace_id, space_id = backend_client.resolve_task_location(user_id, task_id)
-        task = backend_client.get_task(user_id, workspace_id, space_id, task_id)
+        user_token = get_current_user_token()
+        workspace_id, space_id = backend_client.resolve_task_location(user_id, task_id, user_token)
+        task = backend_client.get_task(user_id, workspace_id, space_id, task_id, user_token=user_token)
     except backend_client.BackendError as e:
         return err("BACKEND_ERROR", str(e), 502)
     if not task: return err("NOT_FOUND", f"Task {task_id} not found", 404)
@@ -454,12 +456,13 @@ def get_tasks():
     user_id, error = require_user_id()
     if error: return error
     try:
+        user_token = get_current_user_token()
         all_tasks = []
-        for ws in backend_client.get_workspaces(user_id):
+        for ws in backend_client.get_workspaces(user_id, user_token):
             ws_id = backend_client._field(ws, "id")
-            for sp in backend_client.get_spaces(user_id, ws_id):
+            for sp in backend_client.get_spaces(user_id, ws_id, user_token):
                 sp_id = backend_client._field(sp, "id")
-                all_tasks.extend(backend_client.get_tasks(user_id, ws_id, sp_id))
+                all_tasks.extend(backend_client.get_tasks(user_id, ws_id, sp_id, user_token))
         return ok(all_tasks)
     except backend_client.BackendError as e:
         return err("BACKEND_ERROR", str(e), 502)
@@ -469,8 +472,9 @@ def delete_task(task_id):
     user_id, error = require_user_id()
     if error: return error
     try:
-        workspace_id, space_id = backend_client.resolve_task_location(user_id, task_id)
-        backend_client.delete_task(user_id, workspace_id, space_id, task_id)
+        user_token = get_current_user_token()
+        workspace_id, space_id = backend_client.resolve_task_location(user_id, task_id, user_token)
+        backend_client.delete_task(user_id, workspace_id, space_id, task_id, user_token=user_token)
     except backend_client.BackendError as e:
         return err("BACKEND_ERROR", str(e), 502)
     return ok({"deleted": True, "id": task_id})
@@ -483,8 +487,9 @@ def complete_task(task_id):
     completed = data.get('completed', True)
     status = "Completed" if completed else "Todo"
     try:
-        workspace_id, space_id = backend_client.resolve_task_location(user_id, task_id)
-        task = backend_client.set_task_status(user_id, workspace_id, space_id, task_id, status)
+        user_token = get_current_user_token()
+        workspace_id, space_id = backend_client.resolve_task_location(user_id, task_id, user_token)
+        task = backend_client.set_task_status(user_id, workspace_id, space_id, task_id, status, user_token=user_token)
     except backend_client.BackendError as e:
         return err("BACKEND_ERROR", str(e), 502)
     if not task: return err("NOT_FOUND", f"Task {task_id} not found", 404)
@@ -500,12 +505,13 @@ def get_notes():
     user_id, error = require_user_id()
     if error: return error
     try:
+        user_token = get_current_user_token()
         all_notes = []
-        for ws in backend_client.get_workspaces(user_id):
+        for ws in backend_client.get_workspaces(user_id, user_token):
             ws_id = backend_client._field(ws, "id")
-            for sp in backend_client.get_spaces(user_id, ws_id):
+            for sp in backend_client.get_spaces(user_id, ws_id, user_token):
                 sp_id = backend_client._field(sp, "id")
-                all_notes.extend(backend_client.get_notes(user_id, ws_id, sp_id))
+                all_notes.extend(backend_client.get_notes(user_id, ws_id, sp_id, user_token))
         return ok(all_notes)
     except backend_client.BackendError as e:
         return err("BACKEND_ERROR", str(e), 502)
@@ -515,8 +521,9 @@ def delete_note(note_id):
     user_id, error = require_user_id()
     if error: return error
     try:
-        workspace_id, space_id = backend_client.resolve_note_location(user_id, note_id)
-        backend_client.delete_note(user_id, workspace_id, space_id, note_id)
+        user_token = get_current_user_token()
+        workspace_id, space_id = backend_client.resolve_note_location(user_id, note_id, user_token)
+        backend_client.delete_note(user_id, workspace_id, space_id, note_id, user_token=user_token)
     except backend_client.BackendError as e:
         return err("BACKEND_ERROR", str(e), 502)
     return ok({"deleted": True, "id": note_id})
@@ -530,7 +537,7 @@ def analytics():
     user_id, error = require_user_id()
     if error: return error
     try:
-        return ok(backend_client.get_analytics(user_id))
+        return ok(backend_client.get_analytics(user_id, user_token=get_current_user_token()))
     except backend_client.BackendError as e:
         return err("BACKEND_ERROR", str(e), 502)
 
@@ -550,7 +557,7 @@ def get_memory():
     user_id, error = require_user_id()
     if error: return error
     try:
-        return ok(backend_client.get_memory(user_id))
+        return ok(backend_client.get_memory(user_id, user_token=get_current_user_token()))
     except backend_client.BackendError as e:
         return err("BACKEND_ERROR", str(e), 502)
 
@@ -562,7 +569,7 @@ def save_memory():
     if not data.get('key') or not data.get('value'):
         return err("VALIDATION_ERROR", "Both 'key' and 'value' fields are required")
     try:
-        backend_client.save_memory(user_id, data['key'], data['value'])
+        backend_client.save_memory(user_id, data['key'], data['value'], user_token=get_current_user_token())
     except backend_client.BackendError as e:
         return err("BACKEND_ERROR", str(e), 502)
     return ok({"key": data['key'], "value": data['value']})
@@ -572,7 +579,7 @@ def delete_memory(key):
     user_id, error = require_user_id()
     if error: return error
     try:
-        backend_client.delete_memory(user_id, key)
+        backend_client.delete_memory(user_id, key, user_token=get_current_user_token())
     except backend_client.BackendError as e:
         return err("BACKEND_ERROR", str(e), 502)
     return ok({"deleted": True, "key": key})
@@ -628,7 +635,7 @@ def clear():
     user_id, error = require_user_id()
     if error: return error
     try:
-        backend_client.clear_all(user_id)
+        backend_client.clear_all(user_id, user_token=get_current_user_token())
     except backend_client.BackendError as e:
         return err("BACKEND_ERROR", str(e), 502)
     return ok({"cleared": True})
@@ -726,11 +733,12 @@ def export_pdf(note_id):
     if error: return error
     note = None
     try:
-        for ws in backend_client.get_workspaces(user_id):
+        user_token = get_current_user_token()
+        for ws in backend_client.get_workspaces(user_id, user_token):
             ws_id = backend_client._field(ws, "id")
-            for sp in backend_client.get_spaces(user_id, ws_id):
+            for sp in backend_client.get_spaces(user_id, ws_id, user_token):
                 sp_id = backend_client._field(sp, "id")
-                for n in backend_client.get_notes(user_id, ws_id, sp_id):
+                for n in backend_client.get_notes(user_id, ws_id, sp_id, user_token):
                     if backend_client._field(n, "id") == note_id:
                         note = n
                         break
@@ -768,18 +776,19 @@ def export_workspace_pdf(workspace_id):
     user_id, error = require_user_id()
     if error: return error
     try:
+        user_token = get_current_user_token()
         workspace = next(
-            (ws for ws in backend_client.get_workspaces(user_id)
+            (ws for ws in backend_client.get_workspaces(user_id, user_token)
              if backend_client._field(ws, "id") == workspace_id),
             None
         )
         if not workspace: return err("NOT_FOUND", f"Workspace {workspace_id} not found", 404)
 
         tasks, notes = [], []
-        for sp in backend_client.get_spaces(user_id, workspace_id):
+        for sp in backend_client.get_spaces(user_id, workspace_id, user_token):
             sp_id = backend_client._field(sp, "id")
-            tasks.extend(backend_client.get_tasks(user_id, workspace_id, sp_id))
-            notes.extend(backend_client.get_notes(user_id, workspace_id, sp_id))
+            tasks.extend(backend_client.get_tasks(user_id, workspace_id, sp_id, user_token))
+            notes.extend(backend_client.get_notes(user_id, workspace_id, sp_id, user_token))
 
         summary = {
             "workspace": {
@@ -846,7 +855,7 @@ def export_today_pdf():
     user_id, error = require_user_id()
     if error: return error
     try:
-        briefing = backend_client.get_briefing(user_id)
+        briefing = backend_client.get_briefing(user_id, user_token=get_current_user_token())
         tasks = briefing.get("todaysTasks", [])
         overdue = briefing.get("overdueTasks", [])
         buffer = io.BytesIO()

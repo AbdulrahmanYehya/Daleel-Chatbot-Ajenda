@@ -460,11 +460,19 @@ def resolve_task_location(user_id: str, task_id, user_token: str = ""):
     """Returns (workspace_id, space_id) containing task_id, via GET /api/ai/tasks/{taskId}/location. No fallback."""
     resp = requests.get(f"{BACKEND_URL}/api/ai/tasks/{task_id}/location", headers=_headers(user_id, user_token=user_token), timeout=TIMEOUT)
     data = _unwrap(resp)
-    return data["workspaceId"], data["spaceId"]
+    wid = _field(data, "workspaceId", default=None)
+    sid = _field(data, "spaceId", default=None)
+    if wid is None or sid is None:
+        raise BackendError(f"Location response missing workspaceId/spaceId: {str(data)[:200]}")
+    return wid, sid
 
 
 def resolve_note_location(user_id: str, note_id, user_token: str = ""):
     """Returns (workspace_id, space_id) containing note_id, via GET /api/ai/notes/{noteId}/location. No fallback."""
     resp = requests.get(f"{BACKEND_URL}/api/ai/notes/{note_id}/location", headers=_headers(user_id, user_token=user_token), timeout=TIMEOUT)
     data = _unwrap(resp)
-    return data["workspaceId"], data["spaceId"]
+    wid = _field(data, "workspaceId", default=None)
+    sid = _field(data, "spaceId", default=None)
+    if wid is None or sid is None:
+        raise BackendError(f"Location response missing workspaceId/spaceId: {str(data)[:200]}")
+    return wid, sid
