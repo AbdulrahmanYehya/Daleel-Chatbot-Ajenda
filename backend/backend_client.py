@@ -32,11 +32,13 @@ def _headers(user_id: str, user_token: str = "") -> dict:
 
 
 def _unwrap(response) -> dict:
-    """Every .NET response uses the {success, data, error} envelope.
-    Casing of these top-level keys is unconfirmed (see _field docstring),
-    so use the same tolerant lookup rather than hardcoding lowercase —
-    a casing mismatch here would silently misread every successful 200
-    as a failure.
+    """Parses a .NET response body. Two envelope shapes are in play:
+      1. {success, data, error} — used by most action/mutation endpoints.
+      2. {items, pageNumber, pageSize, totalPages, hasPrevious, hasNext} —
+         used by (at least) list/pagination endpoints like GET /api/WorkSpaces,
+         which return the paginated list directly with no success/data wrapper.
+    Casing of keys is unconfirmed (see _field docstring), so use the same
+    tolerant lookup rather than hardcoding either shape.
     """
     try:
         payload = response.json()
@@ -44,9 +46,14 @@ def _unwrap(response) -> dict:
         raise BackendError(f"Non-JSON response ({response.status_code}): {response.text[:200]}")
 
     success = _field(payload, "success", default=None)
+
     if success is None:
-        # Envelope shape didn't match any expected casing at all —
-        # log the raw keys so this is diagnosable instead of guessed at.
+        # No success/data envelope at all — check for the paginated-list shape
+        # before giving up. "items" being present (even as an empty list) is
+        # the signal, since pageNumber/pageSize alone could theoretically be 0.
+        items = _field(payload, "items", default=None)
+        if items is not None:
+            return items
         logging.error(f"Unrecognized response envelope shape: {list(payload.keys())[:10]}")
 
     if not success:
