@@ -1174,6 +1174,14 @@ class AdkActionHandler:
                 success = True
 
         state = _aggregate_state(user_id, user_token)
+        if final_text == "I couldn't generate a response." and tool_events:
+            fallback = _build_fallback_confirmation(tool_events)
+            if fallback:
+                final_text = fallback
+                
+        logging.info(f"FINAL TEXT = {final_text}")
+        logging.info(f"SUCCESS = {success}")
+        logging.info(f"TOOL EVENTS = {tool_events}")
         return {
             "response_message": final_text, "tool_events": tool_events, **state,
             "processing_time": round(time.time() - start_time, 2),
