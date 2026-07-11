@@ -1155,6 +1155,7 @@ class EnhancedAIHandler:
             "(e.g., 'hello', 'how are you', 'مرحبا', 'كيف حالك').\n\n"
             "RULE: If the request involves fetching or researching external information BEFORE saving, "
             "it is COMPLEX regardless of whether the final action is just creating a note or task.\n\n"
+            "COMPLEX includes ANY request involving external services or integrations, including:Gmail, Email, Inbox, Drafts, Replying to emails,  Google Calendar, Meetings, Events, GitHub, Pull Requests, Issues, Repositories, Productivity analytics, - Daily briefing, - User memories, - Connected integrations, If a request requires an external API or integration, always classify it as COMPLEX."
             "Reply with ONLY the category word: ACTION, COMPLEX, or CHAT."
         )
         try:
