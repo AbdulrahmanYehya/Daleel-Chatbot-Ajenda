@@ -491,64 +491,85 @@ class AdkComplexHandler:
                 return f"FAILED: Error linking note to task: {e}"
 
         # ── GitHub Tools ──────────────────────────────────────────
+        # Base path CONFIRMED: /integrations/v1/github/*
+        # "repo" is expressed to the model as "owner/name" and split here,
+        # since the backend wants repoOwner/repoName as separate fields.
+
+        def _split_repo(repo: str):
+            if "/" not in repo:
+                raise ValueError(f"repo must be in 'owner/name' format, got: {repo!r}")
+            owner, name = repo.split("/", 1)
+            return owner, name
 
         def tool_github_get_issues(repo: str, state: str = "open") -> str:
-            """Get open or closed issues from a GitHub repository."""
+            """Get open or closed issues from a GitHub repository. repo format: 'owner/name'."""
             try:
+                owner, name = _split_repo(repo)
                 response = requests.get(
-                    f"{BACKEND_URL}/github/issues",
-                    params={"repo": repo, "state": state, "user_id": user_id},
+                    f"{BACKEND_URL}/integrations/v1/github/issues",
+                    params={"repoOwner": owner, "repoName": name, "state": state},
                     headers={"Authorization": f"Bearer {user_token}"},
                     timeout=10
                 )
+                if not response.ok:
+                    return f"FAILED ({response.status_code}): {response.text[:300]}"
                 data = response.json()
                 if data.get("status") == "error":
                     return f"FAILED: {data.get('message')}"
-                return json.dumps(data.get("data", {}), ensure_ascii=False)
+                return json.dumps(data.get("data", data), ensure_ascii=False)
             except Exception as e:
                 return f"FAILED: GitHub error: {e}"
 
         def tool_github_get_prs(repo: str, state: str = "open") -> str:
-            """Get open or closed pull requests from a GitHub repository."""
+            """Get open or closed pull requests from a GitHub repository. repo format: 'owner/name'."""
             try:
+                owner, name = _split_repo(repo)
                 response = requests.get(
-                    f"{BACKEND_URL}/github/prs",
-                    params={"repo": repo, "state": state, "user_id": user_id},
+                    f"{BACKEND_URL}/integrations/v1/github/prs",
+                    params={"repoOwner": owner, "repoName": name, "state": state},
                     headers={"Authorization": f"Bearer {user_token}"},
                     timeout=10
                 )
+                if not response.ok:
+                    return f"FAILED ({response.status_code}): {response.text[:300]}"
                 data = response.json()
                 if data.get("status") == "error":
                     return f"FAILED: {data.get('message')}"
-                return json.dumps(data.get("data", {}), ensure_ascii=False)
+                return json.dumps(data.get("data", data), ensure_ascii=False)
             except Exception as e:
                 return f"FAILED: GitHub PRs error: {e}"
 
-        def tool_github_create_issue(repo: str, title: str, body: str = "", labels: str = "") -> str:
-            """Create a new issue in a GitHub repository."""
+        def tool_github_create_issue(repo: str, title: str, body: str = "") -> str:
+            """Create a new issue in a GitHub repository. repo format: 'owner/name'."""
             try:
+                owner, name = _split_repo(repo)
                 response = requests.post(
-                    f"{BACKEND_URL}/github/issues",
-                    json={"repo": repo, "title": title, "body": body, "labels": labels, "user_id": user_id},
+                    f"{BACKEND_URL}/integrations/v1/github/issues",
+                    json={"repoOwner": owner, "repoName": name, "title": title, "body": body},
                     headers={"Authorization": f"Bearer {user_token}"},
                     timeout=10
                 )
+                if not response.ok:
+                    return f"FAILED ({response.status_code}): {response.text[:300]}"
                 data = response.json()
                 if data.get("status") == "error":
                     return f"FAILED: {data.get('message')}"
-                return f"SUCCESS: Issue created. {json.dumps(data.get('data', {}), ensure_ascii=False)}"
+                return f"SUCCESS: Issue created. {json.dumps(data.get('data', data), ensure_ascii=False)}"
             except Exception as e:
                 return f"FAILED: Create issue error: {e}"
 
         def tool_github_close_issue(repo: str, issue_number: int) -> str:
-            """Close an existing issue in a GitHub repository."""
+            """Close an existing issue in a GitHub repository. repo format: 'owner/name'."""
             try:
+                owner, name = _split_repo(repo)
                 response = requests.post(
-                    f"{BACKEND_URL}/github/issues/close",
-                    json={"repo": repo, "issue_number": issue_number, "user_id": user_id},
+                    f"{BACKEND_URL}/integrations/v1/github/issues/close",
+                    json={"repoOwner": owner, "repoName": name, "issueNumber": issue_number},
                     headers={"Authorization": f"Bearer {user_token}"},
                     timeout=10
                 )
+                if not response.ok:
+                    return f"FAILED ({response.status_code}): {response.text[:300]}"
                 data = response.json()
                 if data.get("status") == "error":
                     return f"FAILED: {data.get('message')}"
@@ -560,52 +581,34 @@ class AdkComplexHandler:
             """Get all GitHub repositories connected to the user's account."""
             try:
                 response = requests.get(
-                    f"{BACKEND_URL}/github/repos",
-                    params={"user_id": user_id},
+                    f"{BACKEND_URL}/integrations/v1/github/repos",
                     headers={"Authorization": f"Bearer {user_token}"},
                     timeout=10
                 )
+                if not response.ok:
+                    return f"FAILED ({response.status_code}): {response.text[:300]}"
                 data = response.json()
                 if data.get("status") == "error":
                     return f"FAILED: {data.get('message')}"
-                return json.dumps(data.get("data", {}), ensure_ascii=False)
+                return json.dumps(data.get("data", data), ensure_ascii=False)
             except Exception as e:
                 return f"FAILED: Get repos error: {e}"
 
         # ── Gmail Tools ───────────────────────────────────────────
+        # Base path CONFIRMED: /integrations/v1/gmail/*
 
         def tool_gmail_send(to: str, subject: str, body: str) -> str:
             """Send an email via the user's connected Gmail account."""
             try:
                 response = requests.post(
                     f"{BACKEND_URL}/integrations/v1/gmail/send",
-                    json={
-                        "to": to,
-                        "subject": subject,
-                        "bodyText": body
-                    },
-                    headers={
-                        "Authorization": f"Bearer {user_token}"
-                    },
+                    json={"to": to, "subject": subject, "bodyText": body},
+                    headers={"Authorization": f"Bearer {user_token}"},
                     timeout=10
                 )
-
-                print("STATUS:", response.status_code)
-                print("BODY:", response.text)
-
                 if not response.ok:
-                    return f"FAILED ({response.status_code}): {response.text}"
-
-                # Some endpoints return no JSON on success (204 No Content)
-                if response.text.strip():
-                    try:
-                        data = response.json()
-                        print("JSON:", data)
-                    except Exception:
-                        print("Response was not JSON.")
-
+                    return f"FAILED ({response.status_code}): {response.text[:300]}"
                 return "SUCCESS: Email sent."
-
             except Exception as e:
                 return f"FAILED: Gmail send error: {e}"
 
@@ -613,15 +616,17 @@ class AdkComplexHandler:
             """Get emails from the user's Gmail inbox. Optionally filter with a search query."""
             try:
                 response = requests.get(
-                    f"{BACKEND_URL}/gmail/inbox",
-                    params={"max_results": max_results, "query": query, "user_id": user_id},
+                    f"{BACKEND_URL}/integrations/v1/gmail/inbox",
+                    params={"maxResults": max_results, "query": query},
                     headers={"Authorization": f"Bearer {user_token}"},
                     timeout=10
                 )
+                if not response.ok:
+                    return f"FAILED ({response.status_code}): {response.text[:300]}"
                 data = response.json()
                 if data.get("status") == "error":
                     return f"FAILED: {data.get('message')}"
-                return json.dumps(data.get("data", {}), ensure_ascii=False)
+                return json.dumps(data.get("data", data), ensure_ascii=False)
             except Exception as e:
                 return f"FAILED: Gmail inbox error: {e}"
 
@@ -629,30 +634,39 @@ class AdkComplexHandler:
             """Get the full details of a specific Gmail message by its ID."""
             try:
                 response = requests.get(
-                    f"{BACKEND_URL}/gmail/message",
-                    params={"message_id": message_id, "user_id": user_id},
+                    f"{BACKEND_URL}/integrations/v1/gmail/message",
+                    params={"messageId": message_id},
                     headers={"Authorization": f"Bearer {user_token}"},
                     timeout=10
                 )
+                if not response.ok:
+                    return f"FAILED ({response.status_code}): {response.text[:300]}"
                 data = response.json()
                 if data.get("status") == "error":
                     return f"FAILED: {data.get('message')}"
-                return json.dumps(data.get("data", {}), ensure_ascii=False)
+                return json.dumps(data.get("data", data), ensure_ascii=False)
             except Exception as e:
                 return f"FAILED: Get message error: {e}"
 
-        def tool_gmail_reply(message_id: str, body: str) -> str:
-            """Reply to an existing Gmail email thread."""
+        def tool_gmail_reply(to: str, subject: str, body: str, original_message_id: str, thread_id: str) -> str:
+            """
+            Reply to an existing Gmail email thread. MUST call tool_gmail_get_message
+            or tool_gmail_get_inbox FIRST to obtain original_message_id and thread_id,
+            and to know who to reply 'to' and the correct 'subject' (usually prefixed
+            with 'Re: ').
+            """
             try:
                 response = requests.post(
-                    f"{BACKEND_URL}/gmail/reply",
-                    json={"message_id": message_id, "body": body, "user_id": user_id},
+                    f"{BACKEND_URL}/integrations/v1/gmail/reply",
+                    json={
+                        "to": to, "subject": subject, "bodyText": body,
+                        "originalMessageId": original_message_id, "threadId": thread_id,
+                    },
                     headers={"Authorization": f"Bearer {user_token}"},
                     timeout=10
                 )
-                data = response.json()
-                if data.get("status") == "error":
-                    return f"FAILED: {data.get('message')}"
+                if not response.ok:
+                    return f"FAILED ({response.status_code}): {response.text[:300]}"
                 return "SUCCESS: Reply sent."
             except Exception as e:
                 return f"FAILED: Gmail reply error: {e}"
@@ -661,63 +675,81 @@ class AdkComplexHandler:
             """Save an email as a draft in Gmail without sending it."""
             try:
                 response = requests.post(
-                    f"{BACKEND_URL}/gmail/draft",
-                    json={"to": to, "subject": subject, "body": body, "user_id": user_id},
+                    f"{BACKEND_URL}/integrations/v1/gmail/draft",
+                    json={"to": to, "subject": subject, "bodyText": body},
                     headers={"Authorization": f"Bearer {user_token}"},
                     timeout=10
                 )
-                data = response.json()
-                if data.get("status") == "error":
-                    return f"FAILED: {data.get('message')}"
+                if not response.ok:
+                    return f"FAILED ({response.status_code}): {response.text[:300]}"
                 return "SUCCESS: Draft saved."
             except Exception as e:
                 return f"FAILED: Save draft error: {e}"
 
         # ── Google Calendar Tools ─────────────────────────────────
+        # Base path CONFIRMED (note the backend's spelling): /integrations/v1/calander/*
+        # Request bodies use nested {dateTime, timeZone} objects, not flat strings.
+
+        def _event_time(dt: str, tz: str = "UTC") -> dict:
+            return {"dateTime": dt, "timeZone": tz}
 
         def tool_calendar_get_events(date_from: str, date_to: str) -> str:
             """Get Google Calendar events between two dates. Format: YYYY-MM-DD."""
             try:
                 response = requests.get(
-                    f"{BACKEND_URL}/calendar/events",
-                    params={"date_from": date_from, "date_to": date_to, "user_id": user_id},
+                    f"{BACKEND_URL}/integrations/v1/calander/events",
+                    params={"dateFrom": date_from, "dateTo": date_to},
                     headers={"Authorization": f"Bearer {user_token}"},
                     timeout=10
                 )
+                if not response.ok:
+                    return f"FAILED ({response.status_code}): {response.text[:300]}"
                 data = response.json()
                 if data.get("status") == "error":
                     return f"FAILED: {data.get('message')}"
-                return json.dumps(data.get("data", {}), ensure_ascii=False)
+                return json.dumps(data.get("data", data), ensure_ascii=False)
             except Exception as e:
                 return f"FAILED: Calendar get events error: {e}"
 
-        def tool_calendar_create_event(title: str, start: str, end: str, description: str = "", location: str = "") -> str:
+        def tool_calendar_create_event(title: str, start: str, end: str, description: str = "", timezone: str = "UTC") -> str:
             """Create a new event in Google Calendar. start/end format: YYYY-MM-DDTHH:MM."""
             try:
                 response = requests.post(
-                    f"{BACKEND_URL}/calendar/events",
-                    json={"title": title, "start": start, "end": end,
-                          "description": description, "location": location, "user_id": user_id},
+                    f"{BACKEND_URL}/integrations/v1/calander/events",
+                    json={
+                        "summary": title,
+                        "description": description,
+                        "start": _event_time(start, timezone),
+                        "end": _event_time(end, timezone),
+                    },
                     headers={"Authorization": f"Bearer {user_token}"},
                     timeout=10
                 )
+                if not response.ok:
+                    return f"FAILED ({response.status_code}): {response.text[:300]}"
                 data = response.json()
                 if data.get("status") == "error":
                     return f"FAILED: {data.get('message')}"
-                return f"SUCCESS: Event created. {json.dumps(data.get('data', {}), ensure_ascii=False)}"
+                return f"SUCCESS: Event created. {json.dumps(data.get('data', data), ensure_ascii=False)}"
             except Exception as e:
                 return f"FAILED: Create event error: {e}"
 
-        def tool_calendar_update_event(event_id: str, title: str = "", start: str = "", end: str = "") -> str:
+        def tool_calendar_update_event(event_id: str, title: str = "", start: str = "", end: str = "", description: str = "", timezone: str = "UTC") -> str:
             """Update an existing Google Calendar event by its ID."""
             try:
-                updates = {k: v for k, v in [("title", title), ("start", start), ("end", end)] if v}
+                payload = {}
+                if title: payload["summary"] = title
+                if description: payload["description"] = description
+                if start: payload["start"] = _event_time(start, timezone)
+                if end: payload["end"] = _event_time(end, timezone)
                 response = requests.put(
-                    f"{BACKEND_URL}/calendar/events",
-                    json={"event_id": event_id, **updates, "user_id": user_id},
+                    f"{BACKEND_URL}/integrations/v1/calander/events/{event_id}",
+                    json=payload,
                     headers={"Authorization": f"Bearer {user_token}"},
                     timeout=10
                 )
+                if not response.ok:
+                    return f"FAILED ({response.status_code}): {response.text[:300]}"
                 data = response.json()
                 if data.get("status") == "error":
                     return f"FAILED: {data.get('message')}"
@@ -729,19 +761,20 @@ class AdkComplexHandler:
             """Delete a Google Calendar event by its ID."""
             try:
                 response = requests.delete(
-                    f"{BACKEND_URL}/calendar/events",
-                    json={"event_id": event_id, "user_id": user_id},
+                    f"{BACKEND_URL}/integrations/v1/calander/events/{event_id}",
                     headers={"Authorization": f"Bearer {user_token}"},
                     timeout=10
                 )
-                data = response.json()
-                if data.get("status") == "error":
-                    return f"FAILED: {data.get('message')}"
+                if not response.ok:
+                    return f"FAILED ({response.status_code}): {response.text[:300]}"
                 return "SUCCESS: Event deleted."
             except Exception as e:
                 return f"FAILED: Delete event error: {e}"
 
         # ── Integration Status ────────────────────────────────────
+        # NOTE: no confirmed spec was provided for this endpoint (unlike
+        # github/gmail/calendar above). Left as the prior best-guess path;
+        # verify against the backend before relying on it.
 
         def tool_check_integrations() -> str:
             """Check which external integrations (GitHub, Gmail, Calendar) are connected for the user."""
