@@ -32,16 +32,28 @@ def _headers(user_id: str, user_token: str = "") -> dict:
 
 
 def _unwrap(response) -> dict:
-    """Every .NET response uses the {success, data, error} envelope."""
+    """Every .NET response uses the {success, data, error} envelope.
+    Casing of these top-level keys is unconfirmed (see _field docstring),
+    so use the same tolerant lookup rather than hardcoding lowercase —
+    a casing mismatch here would silently misread every successful 200
+    as a failure.
+    """
     try:
         payload = response.json()
     except Exception:
         raise BackendError(f"Non-JSON response ({response.status_code}): {response.text[:200]}")
 
-    if not payload.get("success", False):
-        error = payload.get("error") or {}
-        raise BackendError(error.get("message", f"Request failed ({response.status_code})"))
-    return payload.get("data")
+    success = _field(payload, "success", default=None)
+    if success is None:
+        # Envelope shape didn't match any expected casing at all —
+        # log the raw keys so this is diagnosable instead of guessed at.
+        logging.error(f"Unrecognized response envelope shape: {list(payload.keys())[:10]}")
+
+    if not success:
+        error = _field(payload, "error", default={}) or {}
+        message = _field(error, "message", default=None) if isinstance(error, dict) else None
+        raise BackendError(message or f"Request failed ({response.status_code}): {str(payload)[:200]}")
+    return _field(payload, "data")
 
 
 def _field(obj: dict, *names, default=None):
