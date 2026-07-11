@@ -578,11 +578,13 @@ class AdkComplexHandler:
             """Send an email via the user's connected Gmail account."""
             try:
                 response = requests.post(
-                    f"{BACKEND_URL}/gmail/send",
+                    f"{BACKEND_URL}/integrations/v1/gmail/send",
                     json={"to": to, "subject": subject, "body": body, "cc": cc, "user_id": user_id},
                     headers={"Authorization": f"Bearer {user_token}"},
                     timeout=10
                 )
+                print(response.status_code)
+                print(response.text)
                 data = response.json()
                 if data.get("status") == "error":
                     return f"FAILED: {data.get('message')}"
