@@ -508,7 +508,7 @@ class AdkComplexHandler:
                 response = requests.get(
                     f"{BACKEND_URL}/integrations/v1/github/issues",
                     params={"repoOwner": owner, "repoName": name, "state": state},
-                    headers={"Authorization": f"Bearer {user_token}"},
+                    headers=backend_client._headers(user_id, user_token),
                     timeout=10
                 )
                 if not response.ok:
@@ -527,7 +527,7 @@ class AdkComplexHandler:
                 response = requests.get(
                     f"{BACKEND_URL}/integrations/v1/github/prs",
                     params={"repoOwner": owner, "repoName": name, "state": state},
-                    headers={"Authorization": f"Bearer {user_token}"},
+                    headers=backend_client._headers(user_id, user_token),
                     timeout=10
                 )
                 if not response.ok:
@@ -546,7 +546,7 @@ class AdkComplexHandler:
                 response = requests.post(
                     f"{BACKEND_URL}/integrations/v1/github/issues",
                     json={"repoOwner": owner, "repoName": name, "title": title, "body": body},
-                    headers={"Authorization": f"Bearer {user_token}"},
+                    headers=backend_client._headers(user_id, user_token),
                     timeout=10
                 )
                 if not response.ok:
@@ -565,7 +565,7 @@ class AdkComplexHandler:
                 response = requests.post(
                     f"{BACKEND_URL}/integrations/v1/github/issues/close",
                     json={"repoOwner": owner, "repoName": name, "issueNumber": issue_number},
-                    headers={"Authorization": f"Bearer {user_token}"},
+                    headers=backend_client._headers(user_id, user_token),
                     timeout=10
                 )
                 if not response.ok:
@@ -582,7 +582,7 @@ class AdkComplexHandler:
             try:
                 response = requests.get(
                     f"{BACKEND_URL}/integrations/v1/github/repos",
-                    headers={"Authorization": f"Bearer {user_token}"},
+                    headers=backend_client._headers(user_id, user_token),
                     timeout=10
                 )
                 if not response.ok:
@@ -603,7 +603,7 @@ class AdkComplexHandler:
                 response = requests.post(
                     f"{BACKEND_URL}/integrations/v1/gmail/send",
                     json={"to": to, "subject": subject, "bodyText": body},
-                    headers={"Authorization": f"Bearer {user_token}"},
+                    headers=backend_client._headers(user_id, user_token),
                     timeout=10
                 )
                 if not response.ok:
@@ -618,7 +618,7 @@ class AdkComplexHandler:
                 response = requests.get(
                     f"{BACKEND_URL}/integrations/v1/gmail/inbox",
                     params={"maxResults": max_results, "query": query},
-                    headers={"Authorization": f"Bearer {user_token}"},
+                    headers=backend_client._headers(user_id, user_token),
                     timeout=10
                 )
                 if not response.ok:
@@ -636,7 +636,7 @@ class AdkComplexHandler:
                 response = requests.get(
                     f"{BACKEND_URL}/integrations/v1/gmail/message",
                     params={"messageId": message_id},
-                    headers={"Authorization": f"Bearer {user_token}"},
+                    headers=backend_client._headers(user_id, user_token),
                     timeout=10
                 )
                 if not response.ok:
@@ -662,7 +662,7 @@ class AdkComplexHandler:
                         "to": to, "subject": subject, "bodyText": body,
                         "originalMessageId": original_message_id, "threadId": thread_id,
                     },
-                    headers={"Authorization": f"Bearer {user_token}"},
+                    headers=backend_client._headers(user_id, user_token),
                     timeout=10
                 )
                 if not response.ok:
@@ -677,7 +677,7 @@ class AdkComplexHandler:
                 response = requests.post(
                     f"{BACKEND_URL}/integrations/v1/gmail/draft",
                     json={"to": to, "subject": subject, "bodyText": body},
-                    headers={"Authorization": f"Bearer {user_token}"},
+                    headers=backend_client._headers(user_id, user_token),
                     timeout=10
                 )
                 if not response.ok:
@@ -699,7 +699,7 @@ class AdkComplexHandler:
                 response = requests.get(
                     f"{BACKEND_URL}/integrations/v1/calander/events",
                     params={"dateFrom": date_from, "dateTo": date_to},
-                    headers={"Authorization": f"Bearer {user_token}"},
+                    headers=backend_client._headers(user_id, user_token),
                     timeout=10
                 )
                 if not response.ok:
@@ -722,7 +722,7 @@ class AdkComplexHandler:
                         "start": _event_time(start, timezone),
                         "end": _event_time(end, timezone),
                     },
-                    headers={"Authorization": f"Bearer {user_token}"},
+                    headers=backend_client._headers(user_id, user_token),
                     timeout=10
                 )
                 if not response.ok:
@@ -745,7 +745,7 @@ class AdkComplexHandler:
                 response = requests.put(
                     f"{BACKEND_URL}/integrations/v1/calander/events/{event_id}",
                     json=payload,
-                    headers={"Authorization": f"Bearer {user_token}"},
+                    headers=backend_client._headers(user_id, user_token),
                     timeout=10
                 )
                 if not response.ok:
@@ -762,7 +762,7 @@ class AdkComplexHandler:
             try:
                 response = requests.delete(
                     f"{BACKEND_URL}/integrations/v1/calander/events/{event_id}",
-                    headers={"Authorization": f"Bearer {user_token}"},
+                    headers=backend_client._headers(user_id, user_token),
                     timeout=10
                 )
                 if not response.ok:
@@ -780,14 +780,18 @@ class AdkComplexHandler:
             """Check which external integrations (GitHub, Gmail, Calendar) are connected for the user."""
             try:
                 response = requests.get(
-                    f"{BACKEND_URL}/status",
+                    f"{BACKEND_URL}/api/ai/status",
                     params={"user_id": user_id},
-                    headers={"Authorization": f"Bearer {user_token}"},
+                    headers=backend_client._headers(user_id, user_token),
                     timeout=10
                 )
+                if not response.ok:
+                    return f"FAILED ({response.status_code}): {response.text}"
                 data = response.json()
-                if data.get("status") == "error":
-                    return f"FAILED: {data.get('message')}"
+                
+                if not data.get("success", False):
+                    return f"FAILED: {data.get('error', {}).get('message', 'Unknown error')}"
+
                 return json.dumps(data.get("data", {}), ensure_ascii=False)
             except Exception as e:
                 return f"FAILED: Check integrations error: {e}"
