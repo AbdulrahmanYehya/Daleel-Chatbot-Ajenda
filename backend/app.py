@@ -173,8 +173,16 @@ def welcome():
     else:
         logging.warning(f"Welcome: no Authorization token present for user {user_id}; skipping personalized data.")
 
-    todays = briefing_data.get("todaysTasks") or briefing_data.get("todays_tasks") or []
-    overdue = briefing_data.get("overdueTasks") or briefing_data.get("overdue_tasks") or []
+    # CONFIRMED shape (from live tool_daily_briefing logs):
+    # {"todaySummary": {"totalTasks": N, "completedTasks": N, "activeFocusMinutes": N},
+    #  "overdueCount": N, "hasHeavySchedule": bool}
+    # Using the tolerant _field lookup since exact key casing elsewhere in this
+    # backend has proven inconsistent — don't assume this one's is stable either.
+    today_summary = backend_client._field(briefing_data, "todaySummary", default={}) or {}
+    todays_count = backend_client._field(today_summary, "totalTasks", default=0) or 0
+    overdue_count = backend_client._field(briefing_data, "overdueCount", default=0) or 0
+    heavy_schedule = backend_client._field(briefing_data, "hasHeavySchedule", default=False)
+
     hour = datetime.now().hour
     greeting = "Good morning" if hour < 12 else ("Good afternoon" if hour < 17 else "Good evening")
 
@@ -184,12 +192,13 @@ def welcome():
         # not "there's nothing to check". Don't claim a clear schedule when
         # we never actually looked.
         parts.append("Sign in to see today's tasks and reminders.")
-    elif todays:
-        parts.append(f"You have **{len(todays)} task(s)** scheduled for today.")
+    elif todays_count:
+        heavy_note = " — it looks like a full day" if heavy_schedule else ""
+        parts.append(f"You have **{todays_count} task(s)** scheduled for today{heavy_note}.")
     else:
         parts.append("Your schedule is clear today — want me to plan something?")
-    if overdue:
-        parts.append(f"⚠️ **{len(overdue)} overdue task(s)** need your attention.")
+    if overdue_count:
+        parts.append(f"⚠️ **{overdue_count} overdue task(s)** need your attention.")
     goal = memory.get('goal') or memory.get('goal_2026')
     if goal:
         parts.append(f"Keep pushing toward: *{goal}* 💪")
@@ -317,18 +326,22 @@ def chat_stream():
             })
 
             briefing = backend_client.get_briefing(user_id, user_token=user_token)
-            overdue = briefing.get("overdueTasks", [])
-            todays = briefing.get("todaysTasks", [])
-            if overdue:
+            # CONFIRMED shape: {"todaySummary": {"totalTasks": N, ...}, "overdueCount": N, "hasHeavySchedule": bool}
+            # No task-level detail (titles etc.) is returned by this endpoint,
+            # so alerts here can only report counts, not which tasks specifically.
+            today_summary = backend_client._field(briefing, "todaySummary", default={}) or {}
+            todays_count = backend_client._field(today_summary, "totalTasks", default=0) or 0
+            overdue_count = backend_client._field(briefing, "overdueCount", default=0) or 0
+            heavy_schedule = backend_client._field(briefing, "hasHeavySchedule", default=False)
+            if overdue_count:
                 yield sse("alert", {
                     "type": "overdue",
-                    "message": f"You have {len(overdue)} overdue task(s).",
-                    "tasks": [t['title'] for t in overdue[:3]]
+                    "message": f"You have {overdue_count} overdue task(s)."
                 })
-            if len(todays) > 6:
+            if heavy_schedule or todays_count > 6:
                 yield sse("alert", {
                     "type": "heavy_schedule",
-                    "message": f"You have {len(todays)} tasks today — consider rescheduling some.",
+                    "message": f"You have {todays_count} tasks today — consider rescheduling some.",
                     "tasks": []
                 })
 
@@ -867,9 +880,29 @@ def export_today_pdf():
     user_id, error = require_user_id()
     if error: return error
     try:
-        briefing = backend_client.get_briefing(user_id, user_token=get_current_user_token())
-        tasks = briefing.get("todaysTasks", [])
-        overdue = briefing.get("overdueTasks", [])
+        # The briefing endpoint only returns aggregate counts (todaySummary.totalTasks,
+        # overdueCount) — no per-task detail like title/due date/priority. A PDF
+        # needs actual task objects, so pull the real task list the same way
+        # /api/tasks does, then bucket by due date locally.
+        user_token = get_current_user_token()
+        today_str = datetime.now().strftime('%Y-%m-%d')
+        all_tasks = []
+        for ws in backend_client.get_workspaces(user_id, user_token):
+            ws_id = backend_client._field(ws, "id")
+            for sp in backend_client.get_spaces(user_id, ws_id, user_token):
+                sp_id = backend_client._field(sp, "id")
+                all_tasks.extend(backend_client.get_tasks(user_id, ws_id, sp_id, user_token))
+
+        def _due_date(t):
+            d = backend_client._field(t, "dueDate", default=None)
+            return d[:10] if isinstance(d, str) and len(d) >= 10 else None
+
+        def _is_completed(t):
+            return bool(backend_client._field(t, "completed", "isCompleted", default=False))
+
+        tasks = [t for t in all_tasks if not _is_completed(t) and _due_date(t) == today_str]
+        overdue = [t for t in all_tasks if not _is_completed(t) and (d := _due_date(t)) and d < today_str]
+
         buffer = io.BytesIO()
         p, width, height, font_name = _make_canvas(buffer)
         margin, max_width = 50, width - 100
@@ -885,16 +918,20 @@ def export_today_pdf():
             p.setFillColorRGB(0, 0, 0)
             y -= 18
             for t in overdue:
-                y = _draw_wrapped(p, f"  • {t['title']} (was due {t['due_date']})", font_name, 10, margin, max_width, y, height)
+                title = backend_client._field(t, "title", default="Untitled")
+                due = _due_date(t) or "unknown date"
+                y = _draw_wrapped(p, f"  • {title} (was due {due})", font_name, 10, margin, max_width, y, height)
             y -= 10
         p.drawString(margin, y, f"Today's Tasks ({len(tasks)})")
         y -= 18
         for t in tasks:
-            pri = {'high': '[HIGH]', 'medium': '[MED]', 'low': '[LOW]'}.get(t.get('priority', 'medium'), '')
-            time_str = f" @ {t['due_time']}" if t.get('due_time') else ""
-            y = _draw_wrapped(p, f"  ☐ {pri} {t['title']}{time_str}", font_name, 11, margin, max_width, y, height)
-            if t.get('description'):
-                y = _draw_wrapped(p, f"      {t['description']}", font_name, 9, margin, max_width, y, height)
+            title = backend_client._field(t, "title", default="Untitled")
+            priority = backend_client._field(t, "priority", default="medium") or "medium"
+            description = backend_client._field(t, "description", default="")
+            pri = {'high': '[HIGH]', 'medium': '[MED]', 'low': '[LOW]'}.get(str(priority).lower(), '')
+            y = _draw_wrapped(p, f"  ☐ {pri} {title}", font_name, 11, margin, max_width, y, height)
+            if description:
+                y = _draw_wrapped(p, f"      {description}", font_name, 9, margin, max_width, y, height)
             y -= 4
         p.save()
         buffer.seek(0)
