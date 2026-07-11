@@ -425,14 +425,14 @@ def delete_memory(user_id: str, key: str, user_token: str = "") -> dict:
 
 
 def get_analytics(user_id: str, user_token: str = "") -> dict:
-    """GET /api/analytics"""
-    resp = requests.get(f"{BACKEND_URL}/api/analytics", headers=_headers(user_id, user_token=user_token), timeout=TIMEOUT)
+    """GET /api/ai/analytics/smart"""
+    resp = requests.get(f"{BACKEND_URL}/api/ai/analytics/smart", headers=_headers(user_id, user_token=user_token), timeout=TIMEOUT)
     return _unwrap(resp) or {}
 
 
 def get_briefing(user_id: str, user_token: str = "") -> dict:
-    """GET /api/ai/briefing"""
-    resp = requests.get(f"{BACKEND_URL}/api/ai/briefing", headers=_headers(user_id, user_token=user_token), timeout=TIMEOUT)
+    """GET /api/ai/daily-briefing"""
+    resp = requests.get(f"{BACKEND_URL}/api/ai/daily-briefing", headers=_headers(user_id, user_token=user_token), timeout=TIMEOUT)
     return _unwrap(resp) or {}
 
 
